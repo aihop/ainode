@@ -1,0 +1,19 @@
+{
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.nuxt": true,
+    "**/.output": true,
+    "**/dist": true,
+    "**/.git": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/*/**": true,
+    "**/.nuxt/*/**": true,
+    "**/.output/*/**": true,
+    "**/dist/*/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true
+  },
+  "typescript.validate.enable": true,
+  "javascript.validate.enable": true
+}
