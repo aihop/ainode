@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log"
 
-	"aihop.io/node-api/internal/db"
+	"aihop.io/ainode/internal/db"
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"

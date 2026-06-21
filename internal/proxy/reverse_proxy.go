@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"aihop.io/node-api/internal/adapter"
-	"aihop.io/node-api/internal/billing"
-	"aihop.io/node-api/internal/channel"
-	"aihop.io/node-api/internal/config"
-	"aihop.io/node-api/internal/db"
-	"aihop.io/node-api/internal/metrics"
+	"aihop.io/ainode/internal/adapter"
+	"aihop.io/ainode/internal/billing"
+	"aihop.io/ainode/internal/channel"
+	"aihop.io/ainode/internal/config"
+	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/metrics"
 )
 
 // FallbackTransport 实现 http.RoundTripper 接口，用于在遇到上游限流或错误时进行重试

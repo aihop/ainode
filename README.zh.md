@@ -9,7 +9,7 @@
 [![PostgreSQL](https://img.shields.io/badge/DB-PostgreSQL-336791)](https://postgresql.org)
 [![Redis](https://img.shields.io/badge/Cache-Redis-DC382D)](https://redis.io)
 
-**Node API** 是一个高性能、生产就绪的 AI 模型网关。对外提供统一的 **OpenAI 兼容 API**，对内将请求动态路由到多个上游提供商（OpenAI、Anthropic、Gemini 等）。它拥有健壮的计费引擎，支持原子预扣费、实时流式 Token 统计、自动渠道故障切换和 Redis 驱动的限流——一切设计都是为了防止透支并确保高可用。
+**Node API** 是一个高性能、生产就绪的 AI 模型网关，**核心是一套健壮的计费引擎**。对外提供统一的 API 接口，对内将请求动态路由到多个上游提供商（OpenAI、Anthropic、Gemini 等）。与简单的代理不同，Node API 拥有原子预扣费+多退少补结算、实时流式 Token 统计+断连保护、双余额体系（grant + cash）、自动渠道故障切换和 Redis 驱动的限流——一切设计都是为了防止透支、杜绝漏计并确保高可用。
 
 属于 [APayShop](https://github.com/apayshop) 生态系统。
 

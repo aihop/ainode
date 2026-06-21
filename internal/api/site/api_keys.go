@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"aihop.io/node-api/internal/db"
+	"aihop.io/ainode/internal/db"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 

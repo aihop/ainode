@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log"
 
-	"aihop.io/node-api/internal/billing"
-	"aihop.io/node-api/internal/db"
+	"aihop.io/ainode/internal/billing"
+	"aihop.io/ainode/internal/db"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"

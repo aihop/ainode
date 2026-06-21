@@ -8,7 +8,7 @@ import (
 	"log"
 	"strings"
 
-	"aihop.io/node-api/internal/adapter"
+	"aihop.io/ainode/internal/adapter"
 	"github.com/pkoukk/tiktoken-go"
 )
 

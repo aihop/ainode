@@ -8,7 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"aihop.io/node-api/internal/db"
+	"aihop.io/ainode/internal/db"
 )
 
 // Manager 负责在内存中维护可用的上游渠道池，并提供轮询或权重调度策略

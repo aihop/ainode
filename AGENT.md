@@ -1,10 +1,10 @@
-# Node API: 高性能 AI 模型网关与计费系统
+# AI Node: 高性能 AI 模型网关与计费系统
 
 > **变更日志 (Changelog)**
 
 ## 1. 项目定位与核心架构
 
-Node API 是一个**生产就绪的 AI 模型网关**，对外提供统一的 OpenAI 兼容接口，对内支持动态路由到多个上游提供商（OpenAI、Anthropic、Gemini 等）。核心特色是**原子化预扣费计费引擎 + 流式 Token 实时统计 + 渠道故障自动切换**。
+AI Node 是一个**生产就绪的 AI 模型网关**，对外提供统一的 OpenAI 兼容接口，对内支持动态路由到多个上游提供商（OpenAI、Anthropic、Gemini 等）。核心特色是**原子化预扣费计费引擎 + 流式 Token 实时统计 + 渠道故障自动切换**。
 
 ### 核心技术栈
 
@@ -18,7 +18,7 @@ Node API 是一个**生产就绪的 AI 模型网关**，对外提供统一的 Op
 
 ### 商业定位
 
-Node API 是 APayShop 生态中的**AI 计费网关**，与 APayShop 前端（ainode 主题）深度集成。用户通过 APayShop 下单购买 API 额度 → Node API 负责鉴权、限流、转发、计量、计费结算。
+AI Node 是 APayShop 生态中的**AI 计费网关**，与 APayShop 前端（ainode 主题）深度集成。用户通过 APayShop 下单购买 API 额度 → AI Node 负责鉴权、限流、转发、计量、计费结算。
 
 ---
 
@@ -204,12 +204,12 @@ return 1
 
 | 阶段 | 文件 | 说明 |
 |------|------|------|
-| 鉴权+预扣 | [internal/middleware/auth.go](file:///Users/hugh/code/aihop/node-api/internal/middleware/auth.go#L32-L141) | 解析 Key、估算 Token、Redis Lua 预扣 |
-| 限流 | [internal/middleware/rate_limit.go](file:///Users/hugh/code/aihop/node-api/internal/middleware/rate_limit.go#L1-L106) | RPM/TPM 滑动窗口，超限退款 |
-| 代理 | [internal/proxy/reverse_proxy.go](file:///Users/hugh/code/aihop/node-api/internal/proxy/reverse_proxy.go#L1-L341) | 渠道选择、协议适配、请求转发、响应拦截 |
-| 流式计量 | [internal/proxy/tally_reader.go](file:///Users/hugh/code/aihop/node-api/internal/proxy/tally_reader.go#L1-L160) | SSE 拦截、Token 统计、断流止损 |
-| 结算 | [internal/billing/settlement.go](file:///Users/hugh/code/aihop/node-api/internal/billing/settlement.go#L42-L104) | 多退少补、异步推送账单任务 |
-| 异步写库 | [internal/worker/billing.go](file:///Users/hugh/code/aihop/node-api/internal/worker/billing.go#L1-L110) | Asynq 消费、幂等写入 PostgreSQL |
+| 鉴权+预扣 | [internal/middleware/auth.go](file:///Users/hugh/code/aihop/ainode/internal/middleware/auth.go#L32-L141) | 解析 Key、估算 Token、Redis Lua 预扣 |
+| 限流 | [internal/middleware/rate_limit.go](file:///Users/hugh/code/aihop/ainode/internal/middleware/rate_limit.go#L1-L106) | RPM/TPM 滑动窗口，超限退款 |
+| 代理 | [internal/proxy/reverse_proxy.go](file:///Users/hugh/code/aihop/ainode/internal/proxy/reverse_proxy.go#L1-L341) | 渠道选择、协议适配、请求转发、响应拦截 |
+| 流式计量 | [internal/proxy/tally_reader.go](file:///Users/hugh/code/aihop/ainode/internal/proxy/tally_reader.go#L1-L160) | SSE 拦截、Token 统计、断流止损 |
+| 结算 | [internal/billing/settlement.go](file:///Users/hugh/code/aihop/ainode/internal/billing/settlement.go#L42-L104) | 多退少补、异步推送账单任务 |
+| 异步写库 | [internal/worker/billing.go](file:///Users/hugh/code/aihop/ainode/internal/worker/billing.go#L1-L110) | Asynq 消费、幂等写入 PostgreSQL |
 
 ---
 
@@ -263,9 +263,9 @@ type ProviderAdapter interface {
 
 | 厂商 | 文件 | 说明 |
 |------|------|------|
-| OpenAI | [openai.go](file:///Users/hugh/code/aihop/node-api/internal/adapter/openai.go) | 透传，无改写 |
-| Anthropic | [anthropic.go](file:///Users/hugh/code/aihop/node-api/internal/adapter/anthropic.go#L1-L198) | 请求转 `/v1/messages`，SSE 翻译 `content_block_delta` → `choices[0].delta` |
-| Gemini | [gemini.go](file:///Users/hugh/code/aihop/node-api/internal/adapter/gemini.go#L1-L208) | 请求转 `/v1beta/models`，SSE 翻译原生格式 → OpenAI chunk |
+| OpenAI | [openai.go](file:///Users/hugh/code/aihop/ainode/internal/adapter/openai.go) | 透传，无改写 |
+| Anthropic | [anthropic.go](file:///Users/hugh/code/aihop/ainode/internal/adapter/anthropic.go#L1-L198) | 请求转 `/v1/messages`，SSE 翻译 `content_block_delta` → `choices[0].delta` |
+| Gemini | [gemini.go](file:///Users/hugh/code/aihop/ainode/internal/adapter/gemini.go#L1-L208) | 请求转 `/v1beta/models`，SSE 翻译原生格式 → OpenAI chunk |
 
 ---
 

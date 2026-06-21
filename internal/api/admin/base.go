@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"aihop.io/node-api/internal/billing"
-	"aihop.io/node-api/internal/db"
+	"aihop.io/ainode/internal/billing"
+	"aihop.io/ainode/internal/db"
 )
 
 type AdminHandler struct {

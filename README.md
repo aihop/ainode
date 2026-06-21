@@ -9,7 +9,7 @@
 [![PostgreSQL](https://img.shields.io/badge/DB-PostgreSQL-336791)](https://postgresql.org)
 [![Redis](https://img.shields.io/badge/Cache-Redis-DC382D)](https://redis.io)
 
-**Node API** is a high-performance, production-ready AI model gateway that provides a unified **OpenAI-compatible API** frontend while routing requests to multiple upstream providers (OpenAI, Anthropic, Gemini, and more). It features a robust billing engine with atomic pre-deduction, real-time streaming token accounting, automatic channel failover, and Redis-backed rate limiting — all built to prevent overspending and ensure high availability.
+**Node API** is a high-performance, production-ready AI model gateway with a **robust billing engine at its core**. It exposes a unified API frontend while routing requests to multiple upstream providers (OpenAI, Anthropic, Gemini, and more). Unlike simple proxies, Node API features atomic pre-deduction with over-deduct/refund settlement, real-time streaming token accounting with disconnect protection, a dual-balance system (grant + cash), automatic channel failover, and Redis-backed rate limiting — all designed to **prevent overspending, eliminate revenue leakage, and ensure high availability**.
 
 Part of the [APayShop](https://github.com/apayshop) ecosystem.
 

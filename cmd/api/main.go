@@ -18,15 +18,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"aihop.io/node-api/internal/api/admin"
-	"aihop.io/node-api/internal/api/site"
-	"aihop.io/node-api/internal/billing"
-	"aihop.io/node-api/internal/channel"
-	"aihop.io/node-api/internal/config"
-	"aihop.io/node-api/internal/db"
-	"aihop.io/node-api/internal/middleware"
-	"aihop.io/node-api/internal/proxy"
-	"aihop.io/node-api/internal/worker"
+	"aihop.io/ainode/internal/api/admin"
+	"aihop.io/ainode/internal/api/site"
+	"aihop.io/ainode/internal/billing"
+	"aihop.io/ainode/internal/channel"
+	"aihop.io/ainode/internal/config"
+	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/middleware"
+	"aihop.io/ainode/internal/proxy"
+	"aihop.io/ainode/internal/worker"
 )
 
 func main() {

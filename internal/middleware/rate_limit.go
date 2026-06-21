@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"aihop.io/node-api/internal/billing"
-	"aihop.io/node-api/internal/db"
-	"aihop.io/node-api/internal/utils"
+	"aihop.io/ainode/internal/billing"
+	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/utils"
 	"github.com/redis/go-redis/v9"
 )
 

@@ -1,4 +1,4 @@
-module aihop.io/node-api
+module aihop.io/ainode
 
 go 1.25.1
 

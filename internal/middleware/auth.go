@@ -10,10 +10,10 @@ import (
 	"net/http"
 	"strings"
 
-	"aihop.io/node-api/internal/billing"
-	"aihop.io/node-api/internal/config"
-	"aihop.io/node-api/internal/db"
-	"aihop.io/node-api/internal/utils"
+	"aihop.io/ainode/internal/billing"
+	"aihop.io/ainode/internal/config"
+	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/utils"
 
 	"github.com/google/uuid"
 	"github.com/pkoukk/tiktoken-go"

@@ -6,7 +6,7 @@ import (
 	"log"
 	"sync"
 
-	"aihop.io/node-api/internal/db"
+	"aihop.io/ainode/internal/db"
 )
 
 // ModelManager 负责在内存中缓存各模型的计费单价
