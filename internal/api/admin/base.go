@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"fastix.ai/datapaas/internal/billing"
-	"fastix.ai/datapaas/internal/db"
+	"aihop.io/node-api/internal/billing"
+	"aihop.io/node-api/internal/db"
 )
 
 type AdminHandler struct {

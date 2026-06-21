@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log"
 
-	"fastix.ai/datapaas/internal/db"
+	"aihop.io/node-api/internal/db"
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"

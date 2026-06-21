@@ -6,7 +6,7 @@ import (
 	"log"
 	"sync"
 
-	"fastix.ai/datapaas/internal/db"
+	"aihop.io/node-api/internal/db"
 )
 
 // ModelManager 负责在内存中缓存各模型的计费单价
@@ -34,7 +34,7 @@ func (m *ModelManager) LoadModel(ctx context.Context, queries *db.Queries, model
 	defer m.mu.Unlock()
 	m.models[modelName] = model
 	log.Printf("Cached pricing for model: %s (Input: %d, Output: %d)", modelName, model.InputPriceCents, model.OutputPriceCents)
-	
+
 	return &model, nil
 }
 
@@ -67,6 +67,7 @@ func (m *ModelManager) ListAllModels() []db.Model {
 	}
 	return list
 }
+
 // GetModel 优先从内存缓存中获取模型价格
 func (m *ModelManager) GetModel(ctx context.Context, queries *db.Queries, modelName string) (*db.Model, error) {
 	m.mu.RLock()

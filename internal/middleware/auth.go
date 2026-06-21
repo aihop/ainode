@@ -10,10 +10,10 @@ import (
 	"net/http"
 	"strings"
 
-	"fastix.ai/datapaas/internal/billing"
-	"fastix.ai/datapaas/internal/config"
-	"fastix.ai/datapaas/internal/db"
-	"fastix.ai/datapaas/internal/utils"
+	"aihop.io/node-api/internal/billing"
+	"aihop.io/node-api/internal/config"
+	"aihop.io/node-api/internal/db"
+	"aihop.io/node-api/internal/utils"
 
 	"github.com/google/uuid"
 	"github.com/pkoukk/tiktoken-go"

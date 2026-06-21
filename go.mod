@@ -1,4 +1,4 @@
-module fastix.ai/datapaas
+module aihop.io/node-api
 
 go 1.25.1
 

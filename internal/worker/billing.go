@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log"
 
-	"fastix.ai/datapaas/internal/billing"
-	"fastix.ai/datapaas/internal/db"
+	"aihop.io/node-api/internal/billing"
+	"aihop.io/node-api/internal/db"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -99,7 +99,7 @@ func (processor *BillingTaskProcessor) HandleRecordBillingLog(ctx context.Contex
 		AmountCents:      req.ActualCostCents,
 		RequestID:        reqID,
 	})
-	
+
 	if err != nil {
 		log.Printf("Worker ERROR: Failed to create billing log for request %s: %v", req.RequestID, err)
 		return err // 返回 error 触发 asynq 自动重试

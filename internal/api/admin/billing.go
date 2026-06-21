@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"fastix.ai/datapaas/internal/db"
+	"aihop.io/node-api/internal/db"
 )
 
 // ListBillingLogs

@@ -5,9 +5,9 @@ import (
 	"log"
 	"time"
 
-	"fastix.ai/datapaas/internal/channel"
-	"fastix.ai/datapaas/internal/db"
-	"fastix.ai/datapaas/internal/billing"
+	"aihop.io/node-api/internal/billing"
+	"aihop.io/node-api/internal/channel"
+	"aihop.io/node-api/internal/db"
 )
 
 // StartBackgroundSync 启动后台协程，定时从 DB 同步数据到内存缓存，并监听 Redis Pub/Sub 实现秒级配置刷新

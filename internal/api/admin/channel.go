@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"fastix.ai/datapaas/internal/db"
+	"aihop.io/node-api/internal/db"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )

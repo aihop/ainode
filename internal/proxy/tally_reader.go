@@ -8,24 +8,24 @@ import (
 	"log"
 	"strings"
 
-	"fastix.ai/datapaas/internal/adapter"
+	"aihop.io/node-api/internal/adapter"
 	"github.com/pkoukk/tiktoken-go"
 )
 
 // TallyReader 包装了原有的 HTTP 响应体，用于在流式传输时实时统计 Token
 type TallyReader struct {
-	OriginalBody   io.ReadCloser
-	ModelName      string
-	PromptTokens   int
-	Provider       string
-	OnComplete     func(promptTokens, completionTokens, cacheHitTokens, cacheMissTokens int) // 回调函数，用于触发结算
-	
-	reader         *bufio.Reader
-	countedTokens  int
-	cacheHitTokens int
+	OriginalBody io.ReadCloser
+	ModelName    string
+	PromptTokens int
+	Provider     string
+	OnComplete   func(promptTokens, completionTokens, cacheHitTokens, cacheMissTokens int) // 回调函数，用于触发结算
+
+	reader          *bufio.Reader
+	countedTokens   int
+	cacheHitTokens  int
 	cacheMissTokens int
-	isClosed       bool
-	tokenizer      *tiktoken.Tiktoken
+	isClosed        bool
+	tokenizer       *tiktoken.Tiktoken
 }
 
 func NewTallyReader(body io.ReadCloser, modelName string, promptTokens int, provider string, onComplete func(p, c, ch, cm int)) *TallyReader {
@@ -64,7 +64,7 @@ func (t *TallyReader) Read(p []byte) (n int, err error) {
 func (t *TallyReader) processChunk(chunk []byte) {
 	provAdapter := adapter.GetAdapter(t.Provider)
 	lines := bytes.Split(chunk, []byte("\n"))
-	
+
 	for _, line := range lines {
 		line = bytes.TrimSpace(line)
 		if !bytes.HasPrefix(line, []byte("data:")) {
@@ -84,7 +84,7 @@ func (t *TallyReader) processChunk(chunk []byte) {
 		if len(openaiData) == 0 {
 			continue // 该事件被丢弃 (如 Claude 的 ping)
 		}
-		
+
 		// 后续依然按 OpenAI 格式提取 Token 消耗
 		var payload struct {
 			Choices []struct {
@@ -93,8 +93,8 @@ func (t *TallyReader) processChunk(chunk []byte) {
 				} `json:"delta"`
 			} `json:"choices"`
 			Usage *struct {
-				PromptTokens     int `json:"prompt_tokens"`
-				CompletionTokens int `json:"completion_tokens"`
+				PromptTokens        int `json:"prompt_tokens"`
+				CompletionTokens    int `json:"completion_tokens"`
 				PromptTokensDetails *struct {
 					CachedTokens int `json:"cached_tokens"`
 				} `json:"prompt_tokens_details"`
@@ -110,7 +110,7 @@ func (t *TallyReader) processChunk(chunk []byte) {
 				if u.CompletionTokens > 0 {
 					t.countedTokens = u.CompletionTokens
 				}
-				
+
 				if u.PromptTokens > 0 {
 					t.PromptTokens = u.PromptTokens
 				}
@@ -122,7 +122,7 @@ func (t *TallyReader) processChunk(chunk []byte) {
 					t.cacheHitTokens = u.PromptTokensDetails.CachedTokens
 					t.cacheMissTokens = t.PromptTokens - t.cacheHitTokens
 				}
-				
+
 				// 如果从 usage 中提取到了有效信息，可以不继续计算本地 token
 				if u.CompletionTokens > 0 {
 					continue

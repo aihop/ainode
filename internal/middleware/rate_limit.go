@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"fastix.ai/datapaas/internal/billing"
-	"fastix.ai/datapaas/internal/db"
-	"fastix.ai/datapaas/internal/utils"
+	"aihop.io/node-api/internal/billing"
+	"aihop.io/node-api/internal/db"
+	"aihop.io/node-api/internal/utils"
 	"github.com/redis/go-redis/v9"
 )
 

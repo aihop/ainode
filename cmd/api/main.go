@@ -18,15 +18,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"fastix.ai/datapaas/internal/api/admin"
-	"fastix.ai/datapaas/internal/api/site"
-	"fastix.ai/datapaas/internal/billing"
-	"fastix.ai/datapaas/internal/channel"
-	"fastix.ai/datapaas/internal/config"
-	"fastix.ai/datapaas/internal/db"
-	"fastix.ai/datapaas/internal/middleware"
-	"fastix.ai/datapaas/internal/proxy"
-	"fastix.ai/datapaas/internal/worker"
+	"aihop.io/node-api/internal/api/admin"
+	"aihop.io/node-api/internal/api/site"
+	"aihop.io/node-api/internal/billing"
+	"aihop.io/node-api/internal/channel"
+	"aihop.io/node-api/internal/config"
+	"aihop.io/node-api/internal/db"
+	"aihop.io/node-api/internal/middleware"
+	"aihop.io/node-api/internal/proxy"
+	"aihop.io/node-api/internal/worker"
 )
 
 func main() {

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"fastix.ai/datapaas/internal/db"
+	"aihop.io/node-api/internal/db"
 )
 
 // Manager 负责在内存中维护可用的上游渠道池，并提供轮询或权重调度策略

@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"fastix.ai/datapaas/internal/db"
+	"aihop.io/node-api/internal/db"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/sync/errgroup"
 )
@@ -111,7 +111,7 @@ func (h *InternalHandler) DashboardHandler(w http.ResponseWriter, r *http.Reques
 			totalQuotaUsed += k.QuotaUsed.Int64
 		}
 	}
-	
+
 	percentage := 0.0
 	if totalQuotaLimit > 0 {
 		percentage = float64(totalQuotaUsed) / float64(totalQuotaLimit) * 100
