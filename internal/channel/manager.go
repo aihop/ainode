@@ -80,16 +80,18 @@ func (m *Manager) getNextChannel(modelName string, requireAsync bool) (*db.Chann
 	return &channel, nil
 }
 
-// containsModel 检查逗号分隔的字符串中是否包含指定的模型
+// containsModel 检查逗号或空格分隔的字符串中是否包含指定的模型
 func containsModel(modelsStr, targetModel string) bool {
 	// 如果配置中包含通配符 *
 	if modelsStr == "*" {
 		return true
 	}
 
-	models := strings.Split(modelsStr, ",")
+	// 统一替换逗号为空格，然后按空白字符分割，兼容 "a,b"、"a b" 或 "a, b" 等格式
+	normalized := strings.ReplaceAll(modelsStr, ",", " ")
+	models := strings.Fields(normalized)
 	for _, m := range models {
-		if strings.TrimSpace(m) == targetModel {
+		if m == targetModel {
 			return true
 		}
 	}

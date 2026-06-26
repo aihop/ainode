@@ -352,10 +352,14 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				metrics.GatewayRequestTotal.WithLabelValues(modelName, strconv.Itoa(int(channelID)), "502").Inc()
 			}
 
-			// utils.WriteOpenAIError 依赖内部包，由于当前文件没有 import utils，所以使用普通的 http.Error 或自行构造 JSON
+			// 构建详细的错误响应，包含具体原因
+			errMsg := "Bad Gateway: Upstream connection failed"
+			if err != nil {
+				errMsg = fmt.Sprintf("Bad Gateway: %v", err)
+			}
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusBadGateway)
-			fmt.Fprintf(w, `{"error":{"message":"Bad Gateway: Upstream connection failed","type":"server_error","code":"bad_gateway"}}`)
+			fmt.Fprintf(w, `{"error":{"message":%q,"type":"server_error","code":"bad_gateway"}}`, errMsg)
 		},
 	}
 }
