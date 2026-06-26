@@ -8,6 +8,7 @@ import (
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/channel"
 	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/utils"
 )
 
 // StartBackgroundSync 启动后台协程，定时从 DB 同步数据到内存缓存，并监听 Redis Pub/Sub 实现秒级配置刷新
@@ -25,7 +26,7 @@ func StartBackgroundSync(ctx context.Context, queries *db.Queries, interval time
 	}
 
 	// 启动 Redis Pub/Sub 监听 (用于控制台修改配置后的秒级刷新)
-	go func() {
+	utils.SafeGo(ctx, "config-pubsub-refresh", func() {
 		pubsub := billing.RedisClient.Subscribe(ctx, "ainode_config_refresh")
 		defer pubsub.Close()
 		ch := pubsub.Channel()
@@ -45,9 +46,9 @@ func StartBackgroundSync(ctx context.Context, queries *db.Queries, interval time
 				}
 			}
 		}
-	}()
+	})
 
-	go func() {
+	utils.SafeGo(ctx, "config-periodic-sync", func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -68,5 +69,5 @@ func StartBackgroundSync(ctx context.Context, queries *db.Queries, interval time
 				}
 			}
 		}
-	}()
+	})
 }

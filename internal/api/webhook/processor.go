@@ -172,16 +172,10 @@ func (h *Handler) processTransaction(ctx context.Context, req transactionWebhook
 		return transactionProcessResult{}, http.StatusInternalServerError, "Failed to commit transaction"
 	}
 
-	newCashBalance := beforeCash
-	newGrantBalance := beforeGrant
-	if req.BalanceType == "grant" {
-		newGrantBalance = afterBalance
-	} else {
-		newCashBalance = afterBalance
-	}
-
+	// 用相对增减(INCRBY)而非绝对 SET 同步缓存，避免覆盖请求侧在途的 DECRBY 扣减
+	// （否则存在竞态：充值把缓存覆盖成 DB 值，丢掉尚未回写 DB 的实时扣减 → 用户可超额消费）。
 	cacheSynced := true
-	if err := billing.SyncUserBalanceCache(ctx, req.UserID, newGrantBalance, newCashBalance); err != nil {
+	if err := billing.CreditBalanceCache(ctx, req.UserID, req.BalanceType, delta); err != nil {
 		cacheSynced = false
 	}
 

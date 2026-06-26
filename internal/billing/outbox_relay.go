@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/utils"
 
 	"github.com/hibiken/asynq"
 )
@@ -22,7 +23,7 @@ func StartOutboxRelay(ctx context.Context, queries *db.Queries) {
 	if queries == nil {
 		return
 	}
-	go func() {
+	utils.SafeGo(ctx, "settlement-outbox-relay", func() {
 		ticker := time.NewTicker(outboxRelayInterval)
 		defer ticker.Stop()
 		log.Println("📦 Settlement outbox relay started")
@@ -34,7 +35,7 @@ func StartOutboxRelay(ctx context.Context, queries *db.Queries) {
 				drainSettlementOutbox(ctx, queries)
 			}
 		}
-	}()
+	})
 }
 
 func drainSettlementOutbox(ctx context.Context, queries *db.Queries) {

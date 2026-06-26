@@ -6,6 +6,8 @@ import (
 	"log"
 	"time"
 
+	"aihop.io/ainode/internal/utils"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -56,7 +58,7 @@ func EnsureBillingLogPartitions(ctx context.Context, pool *pgxpool.Pool, monthsA
 // StartPartitionMaintenance 启动分区维护后台任务。
 // 定期检查并创建未来月份的分区。
 func StartPartitionMaintenance(ctx context.Context, pool *pgxpool.Pool) {
-	go func() {
+	utils.SafeGo(ctx, "partition-maintenance", func() {
 		ticker := time.NewTicker(partitionCheckInterval)
 		defer ticker.Stop()
 
@@ -72,5 +74,5 @@ func StartPartitionMaintenance(ctx context.Context, pool *pgxpool.Pool) {
 				}
 			}
 		}
-	}()
+	})
 }
