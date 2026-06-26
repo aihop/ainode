@@ -154,17 +154,8 @@ func main() {
 		// ==========================
 		adminToken := config.AppConfig.Internal.Token
 		r.Group(func(adminRouter chi.Router) {
-			adminRouter.Use(func(next http.Handler) http.Handler {
-				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					authHeader := r.Header.Get("Authorization")
-					expectedAuth := "Bearer " + adminToken
-					if adminToken == "" || authHeader != expectedAuth {
-						http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
-						return
-					}
-					next.ServeHTTP(w, r)
-				})
-			})
+			// 服务间鉴权：校验 Internal Token（由 APayShop 服务端携带）
+			adminRouter.Use(middleware.InternalTokenAuth(adminToken))
 
 			adminHandler := admin.NewAdminHandler(queries, pool)
 
@@ -200,17 +191,8 @@ func main() {
 
 		// Site API 组 (供 APayShop Node.js 服务端调用)
 		r.Group(func(siteRouter chi.Router) {
-			siteRouter.Use(func(next http.Handler) http.Handler {
-				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					authHeader := r.Header.Get("Authorization")
-					expectedAuth := "Bearer " + adminToken
-					if adminToken == "" || authHeader != expectedAuth {
-						http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
-						return
-					}
-					next.ServeHTTP(w, r)
-				})
-			})
+			// 服务间鉴权：校验 Internal Token（由 APayShop 服务端携带）
+			siteRouter.Use(middleware.InternalTokenAuth(adminToken))
 
 			siteRouter.Get("/api/site/stats", siteHandler.StatsHandler)
 			siteRouter.Get("/api/site/dashboard", siteHandler.DashboardHandler)
