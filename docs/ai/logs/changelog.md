@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-05-15: 模型级并发限制与后台配置打通
+
+**架构决策与业务逻辑：**
+- 在 `models` 表新增 `max_concurrency` 字段，用于承载 DeepSeek 这类“按模型给并发额度”的官方限制；继续沿用现有的 `input / output / cache_hit / cache_miss` 价格结构，不额外拆第二套并发配置表。
+- 新增 `internal/middleware/model_concurrency.go`，基于 Redis 对 `concurrency:model:{model_name}` 做并发占位与释放。请求进入代理前先检查模型上限，超限时直接退款预扣并返回 `429 model_concurrency_exceeded`。
+- 更新 `internal/api/admin/model.go` 与 APayShop `app/themes/ainode/admin/pages/models.vue`，后台创建/编辑模型时可以直接配置 `Max Concurrency`。
+- 更新 `AGENT.md`，将模型级并发限制沉淀为项目规则，明确 `models.max_concurrency` 是当前阶段的标准入口。
+
 ## 2026-03-27: 阶段一：基础脚手架初始化
 
 **架构决策与依赖变更：**
@@ -79,4 +87,3 @@
 - 在 `internal/channel` 中实现了渠道池管理器 `Manager`，支持从数据库加载激活渠道，并实现了基础的 Round-Robin 轮询获取。
 - 在 `internal/config` 中实现了模型管理器 `ModelManager`，它作为内存缓存动态提供模型定价（未命中则查询 DB）。
 - 在 `internal/config` 中增加了 `StartBackgroundSync` 函数，这是一个异步协程，用于定期（如每 5 分钟）同步 DB 中的最新渠道和配置到内存中。
-

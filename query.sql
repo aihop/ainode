@@ -65,10 +65,37 @@ SELECT EXISTS (
     );
 
 -- name: GetModelByName :one
-SELECT * FROM models WHERE model_name = $1 AND status = 1 LIMIT 1;
+SELECT
+    id,
+    model_name,
+    input_price_cents,
+    output_price_cents,
+    cache_hit_price_cents,
+    cache_miss_price_cents,
+    multiplier,
+    max_concurrency,
+    status
+FROM models
+WHERE
+    model_name = $1
+    AND status = 1
+LIMIT 1;
 
 -- name: ListActiveModels :many
-SELECT * FROM models WHERE status = 1 ORDER BY model_name ASC;
+SELECT
+    id,
+    model_name,
+    input_price_cents,
+    output_price_cents,
+    cache_hit_price_cents,
+    cache_miss_price_cents,
+    multiplier,
+    max_concurrency,
+    status
+FROM models
+WHERE
+    status = 1
+ORDER BY model_name ASC;
 
 -- name: ListActiveChannels :many
 SELECT * FROM channels WHERE status = 1 ORDER BY weight DESC;
@@ -151,9 +178,19 @@ INSERT INTO
         cache_hit_price_cents,
         cache_miss_price_cents,
         multiplier,
+        max_concurrency,
         status
     )
-VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING
+    id,
+    model_name,
+    input_price_cents,
+    output_price_cents,
+    cache_hit_price_cents,
+    cache_miss_price_cents,
+    multiplier,
+    max_concurrency,
+    status;
 
 -- name: UpdateModel :one
 UPDATE models
@@ -163,15 +200,36 @@ SET
     cache_hit_price_cents = $4,
     cache_miss_price_cents = $5,
     multiplier = $6,
-    status = $7
+    max_concurrency = $7,
+    status = $8
 WHERE
-    model_name = $1 RETURNING *;
+    model_name = $1 RETURNING
+    id,
+    model_name,
+    input_price_cents,
+    output_price_cents,
+    cache_hit_price_cents,
+    cache_miss_price_cents,
+    multiplier,
+    max_concurrency,
+    status;
 
 -- name: DeleteModel :exec
 DELETE FROM models WHERE model_name = $1;
 
 -- name: ListAllModelsForAdmin :many
-SELECT * FROM models ORDER BY model_name ASC;
+SELECT
+    id,
+    model_name,
+    input_price_cents,
+    output_price_cents,
+    cache_hit_price_cents,
+    cache_miss_price_cents,
+    multiplier,
+    max_concurrency,
+    status
+FROM models
+ORDER BY model_name ASC;
 
 -- name: ListBillingLogs :many
 SELECT *

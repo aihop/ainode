@@ -15,7 +15,7 @@ import (
 func generateAPIKey() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
-	return "sk-dp-" + hex.EncodeToString(b)
+	return "sk-ainode-" + hex.EncodeToString(b)
 }
 
 // MaskKey 隐藏中间部分，只显示首尾 (例如 sk-test-***-001)

@@ -53,8 +53,12 @@ CREATE TABLE IF NOT EXISTS models (
     cache_hit_price_cents BIGINT NOT NULL DEFAULT 0, -- 每 1M Token 的缓存读取价格
     cache_miss_price_cents BIGINT NOT NULL DEFAULT 0, -- 每 1M Token 的缓存创建价格
     multiplier REAL NOT NULL DEFAULT 1.0, -- 用户端计费倍率 (如 0.60x 表示打6折)
+    max_concurrency INT NOT NULL DEFAULT 0, -- 模型级并发限制，0 表示不限制
     status INT DEFAULT 1
 );
+
+ALTER TABLE models
+ADD COLUMN IF NOT EXISTS max_concurrency INT NOT NULL DEFAULT 0;
 
 -- 上游渠道池表（高可用配置）
 CREATE TABLE IF NOT EXISTS channels (

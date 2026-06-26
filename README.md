@@ -175,7 +175,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="http://localhost:5900/v1",
-    api_key="sk-dp-<your-api-key>"
+    api_key="sk-ainode-<your-api-key>"
 )
 ```
 

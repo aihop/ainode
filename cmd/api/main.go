@@ -182,7 +182,10 @@ func main() {
 			// B. RPM 与 TPM 限流中间件 (例如: 每分钟 60 次请求，每分钟 100,000 Token)
 			proxyRouter.Use(middleware.RPMAndTPMMiddleware(queries, 60, 100000))
 
-			// C. 获取可用模型列表 (拦截 /v1/models，直接返回内部数据)
+			// C. 模型级并发限制，按 models.max_concurrency 控制单模型的全局并发占位
+			proxyRouter.Use(middleware.ModelConcurrencyMiddleware(queries))
+
+			// D. 获取可用模型列表 (拦截 /v1/models，直接返回内部数据)
 			proxyRouter.Get("/v1/models", func(w http.ResponseWriter, r *http.Request) {
 				models := config.GlobalModelManager.ListAllModels()
 
@@ -211,7 +214,7 @@ func main() {
 				json.NewEncoder(w).Encode(resp)
 			})
 
-			// D. 挂载代理引擎，接管所有其他请求
+			// E. 挂载代理引擎，接管所有其他请求
 			gatewayProxy := proxy.NewGatewayProxy(queries)
 			proxyRouter.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
 				gatewayProxy.ServeHTTP(w, r)

@@ -182,6 +182,7 @@ type Model struct {
 	CacheHitPriceCents  int64
 	CacheMissPriceCents int64
 	Multiplier          float32
+	MaxConcurrency      int32
 	Status              pgtype.Int4
 }
 

@@ -55,7 +55,8 @@ AI 请严格按照以下结构组织代码：
 │   │   ├── lua/
 │   │   │   └── rate_limit.lua  # 滑动窗口限流脚本
 │   │   ├── auth.go          # 鉴权 + 预扣费中间件
-│   │   └── rate_limit.go    # RPM/TPM 限流中间件
+│   │   ├── rate_limit.go    # RPM/TPM 限流中间件
+│   │   └── model_concurrency.go # 模型级并发占位与释放
 │   ├── api/                 # HTTP 接口
 │   │   ├── admin/           # 管理员 API (渠道/模型 CRUD、账单查询)
 │   │   └── site/            # 用户 API (仪表盘、统计、Key 管理)
@@ -93,7 +94,7 @@ AI 请严格按照以下结构组织代码：
 |------|------|---------|
 | `users` | 用户余额与订阅等级 | `cash_balance`, `grant_balance`, `tier_level`, `grant_expires_at` |
 | `api_keys` | 网关调用凭证 | `key_string`, `user_id`, `allowed_models`, `quota_limit` |
-| `models` | 模型定价与倍率 | `model_name`, `input_price_cents`, `output_price_cents`, `multiplier` |
+| `models` | 模型定价、倍率与并发上限 | `model_name`, `input_price_cents`, `output_price_cents`, `multiplier`, `max_concurrency` |
 | `channels` | 上游渠道配置 | `provider`, `base_url`, `api_key`, `models`, `weight` |
 | `billing_logs` | 计费流水 | `user_id`, `model_name`, `amount_cents`, `prompt_tokens`, `completion_tokens` |
 
@@ -196,7 +197,8 @@ return 1
 在 `internal/middleware/` 中基于 Redis 实现：
 
 1. **RPM/TPM 限流**: 滑动窗口，限制单用户每分钟请求数和 Token 数。触发限流时自动退款预扣。
-2. **优先级路由**: 根据 `api_keys.tier_level`，在高并发时优先保证订阅用户请求。
+2. **模型级并发限制**: 根据 `models.max_concurrency` 在 Redis 中做模型并发占位，超限时直接拒绝并退款预扣。
+3. **优先级路由**: 根据 `api_keys.tier_level`，在高并发时优先保证订阅用户请求。
 
 ---
 
@@ -206,6 +208,7 @@ return 1
 |------|------|------|
 | 鉴权+预扣 | [internal/middleware/auth.go](file:///Users/hugh/code/aihop/ainode/internal/middleware/auth.go#L32-L141) | 解析 Key、估算 Token、Redis Lua 预扣 |
 | 限流 | [internal/middleware/rate_limit.go](file:///Users/hugh/code/aihop/ainode/internal/middleware/rate_limit.go#L1-L106) | RPM/TPM 滑动窗口，超限退款 |
+| 模型并发 | [internal/middleware/model_concurrency.go](file:///Users/hugh/code/aihop/ainode/internal/middleware/model_concurrency.go) | 按模型全局并发占位，超限退款并返回 429 |
 | 代理 | [internal/proxy/reverse_proxy.go](file:///Users/hugh/code/aihop/ainode/internal/proxy/reverse_proxy.go#L1-L341) | 渠道选择、协议适配、请求转发、响应拦截 |
 | 流式计量 | [internal/proxy/tally_reader.go](file:///Users/hugh/code/aihop/ainode/internal/proxy/tally_reader.go#L1-L160) | SSE 拦截、Token 统计、断流止损 |
 | 结算 | [internal/billing/settlement.go](file:///Users/hugh/code/aihop/ainode/internal/billing/settlement.go#L42-L104) | 多退少补、异步推送账单任务 |
