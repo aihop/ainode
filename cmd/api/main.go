@@ -118,7 +118,7 @@ func main() {
 	)
 
 	mux := asynq.NewServeMux()
-	billingProcessor := worker.NewBillingTaskProcessor(queries)
+	billingProcessor := worker.NewBillingTaskProcessor(queries, pool)
 	mux.HandleFunc(billing.TaskRecordBillingLog, billingProcessor.HandleRecordBillingLog)
 
 	go func() {
@@ -139,11 +139,14 @@ func main() {
 
 	// 配置 CORS
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders: []string{"Link"},
+		// 本网关用 Authorization: Bearer 鉴权，不依赖 cookie。
+		// AllowedOrigins:"*" 与 AllowCredentials:true 同时设置是反模式（浏览器也会拒绝），
+		// 故关闭 credentials，避免误导与潜在的跨站凭证泄露。
+		AllowCredentials: false,
 		MaxAge:           300, // Maximum value not ignored by any of major browsers
 	}))
 

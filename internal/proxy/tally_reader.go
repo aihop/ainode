@@ -5,11 +5,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log"
 	"strings"
 	"sync"
 
 	"aihop.io/ainode/internal/provider"
+	"aihop.io/ainode/internal/utils"
 	"github.com/pkoukk/tiktoken-go"
 )
 
@@ -30,12 +30,8 @@ type TallyReader struct {
 }
 
 func NewTallyReader(body io.ReadCloser, modelName string, promptTokens int, provider string, onComplete func(p, c, ch, cm int)) *TallyReader {
-	// 初始化分词器（这里兜底使用 cl100k_base，如果模型不同可以根据 modelName 切换）
-	tkm, err := tiktoken.EncodingForModel(modelName)
-	if err != nil {
-		log.Printf("Warning: failed to get encoding for model %s, falling back to cl100k_base: %v", modelName, err)
-		tkm, _ = tiktoken.GetEncoding("cl100k_base")
-	}
+	// 复用进程内缓存的分词器，避免每个流式请求重复加载 BPE（无法识别的模型回退到 cl100k_base）
+	tkm := utils.GetTokenizer(modelName)
 
 	return &TallyReader{
 		OriginalBody: body,

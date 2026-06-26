@@ -243,8 +243,9 @@ local billing_policy = ARGV[2] or "both"
 在 `internal/middleware/` 中基于 Redis 实现：
 
 1. **RPM/TPM 限流**: 滑动窗口，限制单用户每分钟请求数和 Token 数。触发限流时自动退款预扣。
+   - ⚠️ 当前实现为**全局固定阈值**（`cmd/api/main.go` 挂载时写死 RPM=60 / TPM=100000），尚未按用户/Key 维度差异化。
 2. **模型级并发限制**: 根据 `models.max_concurrency` 在 Redis 中做模型并发占位，超限时直接拒绝并退款预扣。
-3. **优先级路由**: 根据 `api_keys.tier_level`，在高并发时优先保证订阅用户请求。
+3. **优先级路由（规划中，未实现）**: 计划根据 `api_keys.tier_level` 在高并发时优先保证订阅用户请求；当前所有用户共用同一套限流阈值，tier 尚未参与限流/调度。
 
 ### 4.6 多模态网关演进约定
 

@@ -19,7 +19,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/pkoukk/tiktoken-go"
 )
 
 // AuthAndPreDeductMiddleware 负责鉴权、解析请求体、预估 Token 并调用预扣费逻辑
@@ -223,11 +222,7 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 
 // estimatePromptTokens 粗略估算输入的 Token 数量
 func estimateChatPromptTokens(model string, payload *media.ChatCompletionRequest) int {
-	tkm, err := tiktoken.EncodingForModel(model)
-	if err != nil {
-		tkm, _ = tiktoken.GetEncoding("cl100k_base")
-	}
-
+	tkm := utils.GetTokenizer(model)
 	if tkm == nil {
 		return 10 // 极度兜底
 	}
@@ -238,11 +233,7 @@ func estimateChatPromptTokens(model string, payload *media.ChatCompletionRequest
 }
 
 func estimatePlainTextTokens(model, text string) int {
-	tkm, err := tiktoken.EncodingForModel(model)
-	if err != nil {
-		tkm, _ = tiktoken.GetEncoding("cl100k_base")
-	}
-
+	tkm := utils.GetTokenizer(model)
 	if tkm == nil {
 		return 10
 	}
