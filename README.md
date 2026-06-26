@@ -136,8 +136,8 @@ Built-in Prometheus instrumentation for request count, latency, and token consum
 1. **Clone and configure**
 
 ```bash
-git clone https://github.com/apayshop/node-api.git
-cd node-api
+git clone https://github.com/aihop/ainode.git
+cd ainode
 cp config.yaml config.local.yaml
 # Edit config.local.yaml with your database and Redis credentials
 ```
@@ -346,4 +346,4 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ---
 
-Built as part of the [APayShop](https://github.com/apayshop) ecosystem.
+Built as part of the [APayShop](https://github.com/aihop/APayShop) ecosystem.

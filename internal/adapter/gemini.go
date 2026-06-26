@@ -7,8 +7,9 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
+
+	"aihop.io/ainode/internal/media"
 )
 
 type GeminiAdapter struct{}
@@ -20,17 +21,8 @@ func (a *GeminiAdapter) RewriteRequest(req *http.Request, modelName string) erro
 		return err
 	}
 
-	var openaiReq struct {
-		Model       string `json:"model"`
-		Messages    []struct {
-			Role    string      `json:"role"`
-			Content interface{} `json:"content"`
-		} `json:"messages"`
-		MaxTokens   int      `json:"max_tokens"`
-		Temperature *float64 `json:"temperature"`
-		Stream      bool     `json:"stream"`
-	}
-	if err := json.Unmarshal(bodyBytes, &openaiReq); err != nil {
+	openaiReq, err := media.ParseChatCompletionRequest(bodyBytes)
+	if err != nil {
 		return err
 	}
 
@@ -64,55 +56,54 @@ func (a *GeminiAdapter) RewriteRequest(req *http.Request, modelName string) erro
 			role = "model"
 		}
 
+		normalizedParts, err := media.NormalizeMessageParts(m.Content)
+		if err != nil {
+			return err
+		}
+
 		if m.Role == "system" {
-			if contentStr, ok := m.Content.(string); ok {
+			systemTexts := make([]map[string]interface{}, 0, len(normalizedParts))
+			for _, part := range normalizedParts {
+				if part.Type != media.ContentTypeText || part.Text == "" {
+					continue
+				}
+				systemTexts = append(systemTexts, map[string]interface{}{
+					"text": part.Text,
+				})
+			}
+			if len(systemTexts) > 0 {
 				systemInstruction = &map[string]interface{}{
-					"parts": []map[string]interface{}{
-						{"text": contentStr},
-					},
+					"parts": systemTexts,
 				}
 			}
 			continue
 		}
 
-		// 处理文本和多模态
-		var parts []map[string]interface{}
-		if strContent, ok := m.Content.(string); ok {
-			parts = append(parts, map[string]interface{}{"text": strContent})
-		} else if arrContent, ok := m.Content.([]interface{}); ok {
-			for _, part := range arrContent {
-				partMap, ok := part.(map[string]interface{})
-				if !ok {
+		var geminiParts []map[string]interface{}
+		for _, part := range normalizedParts {
+			switch part.Type {
+			case media.ContentTypeText:
+				geminiParts = append(geminiParts, map[string]interface{}{"text": part.Text})
+			case media.ContentTypeInputImage:
+				if part.Input == nil {
 					continue
 				}
-				if partMap["type"] == "text" {
-					parts = append(parts, map[string]interface{}{"text": partMap["text"]})
-				} else if partMap["type"] == "image_url" {
-					if imageUrlObj, ok := partMap["image_url"].(map[string]interface{}); ok {
-						urlStr, _ := imageUrlObj["url"].(string)
-						// 解析 data:image/jpeg;base64,...
-						if strings.HasPrefix(urlStr, "data:") {
-							commaIdx := strings.Index(urlStr, ",")
-							if commaIdx != -1 {
-								mimeType := urlStr[5:commaIdx]
-								mimeType = strings.TrimSuffix(mimeType, ";base64")
-								base64Data := urlStr[commaIdx+1:]
-								parts = append(parts, map[string]interface{}{
-									"inline_data": map[string]interface{}{
-										"mime_type": mimeType,
-										"data":      base64Data,
-									},
-								})
-							}
-						}
-					}
+				resolved, err := media.ResolveMediaInput(req.Context(), *part.Input)
+				if err != nil {
+					return err
 				}
+				geminiParts = append(geminiParts, map[string]interface{}{
+					"inline_data": map[string]interface{}{
+						"mime_type": resolved.MimeType,
+						"data":      resolved.Base64Data,
+					},
+				})
 			}
 		}
 
 		geminiContents = append(geminiContents, map[string]interface{}{
 			"role":  role,
-			"parts": parts,
+			"parts": geminiParts,
 		})
 	}
 

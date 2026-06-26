@@ -11,7 +11,7 @@
 
 **Node API** 是一个高性能、生产就绪的 AI 模型网关，**核心是一套健壮的计费引擎**。对外提供统一的 API 接口，对内将请求动态路由到多个上游提供商（OpenAI、Anthropic、Gemini 等）。与简单的代理不同，Node API 拥有原子预扣费+多退少补结算、实时流式 Token 统计+断连保护、双余额体系（grant + cash）、自动渠道故障切换和 Redis 驱动的限流——一切设计都是为了防止透支、杜绝漏计并确保高可用。
 
-属于 [APayShop](https://github.com/apayshop) 生态系统。
+属于 [AIHop](https://github.com/aihop) 生态系统。
 
 ---
 
@@ -129,8 +129,8 @@
 ### 启动服务
 
 ```bash
-git clone https://github.com/apayshop/node-api.git
-cd node-api
+git clone https://github.com/aihop/ainode.git
+cd ainode
 cp config.yaml config.local.yaml
 # 编辑 config.local.yaml，填入数据库和 Redis 凭据
 
@@ -148,6 +148,10 @@ curl http://localhost:5900/v1/models
 ---
 
 ## API 参考
+
+### 多模态文档
+
+- 开发方案与使用方式见 [docs/ai/multimodal-gateway.zh.md](https://github.com/aihop/ainode/docs/ai/multimodal-gateway.zh.md)
 
 ### OpenAI 兼容端点
 
@@ -335,4 +339,4 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ---
 
-属于 [APayShop](https://github.com/apayshop) 生态系统。
+属于 [APayShop](https://github.com/aihop/APayShop) 生态系统。

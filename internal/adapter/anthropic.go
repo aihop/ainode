@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"aihop.io/ainode/internal/media"
 )
 
 type AnthropicAdapter struct{}
@@ -29,19 +31,8 @@ func (a *AnthropicAdapter) RewriteRequest(req *http.Request, modelName string) e
 		return err
 	}
 
-	// 完整解析 OpenAI 格式请求，支持图片和多模态
-	var openaiReq struct {
-		Model    string `json:"model"`
-		Messages []struct {
-			Role    string      `json:"role"`
-			Content interface{} `json:"content"` // 可能是 string 也可能是 array (多模态)
-		} `json:"messages"`
-		MaxTokens   int      `json:"max_tokens"`
-		Temperature *float64 `json:"temperature"`
-		TopP        *float64 `json:"top_p"`
-		Stream      bool     `json:"stream"`
-	}
-	if err := json.Unmarshal(bodyBytes, &openaiReq); err != nil {
+	openaiReq, err := media.ParseChatCompletionRequest(bodyBytes)
+	if err != nil {
 		return err
 	}
 
@@ -50,53 +41,48 @@ func (a *AnthropicAdapter) RewriteRequest(req *http.Request, modelName string) e
 	var anthropicMessages []map[string]interface{}
 
 	for _, m := range openaiReq.Messages {
+		parts, err := media.NormalizeMessageParts(m.Content)
+		if err != nil {
+			return err
+		}
+
 		if m.Role == "system" {
-			if contentStr, ok := m.Content.(string); ok {
-				systemPrompt += contentStr + "\n"
+			for _, part := range parts {
+				if part.Type == media.ContentTypeText && part.Text != "" {
+					systemPrompt += part.Text + "\n"
+				}
 			}
 		} else {
-			// 处理多模态 Content (数组格式)
-			var content interface{}
-			if strContent, ok := m.Content.(string); ok {
-				content = strContent
-			} else if arrContent, ok := m.Content.([]interface{}); ok {
-				var anthropicContentParts []map[string]interface{}
-				for _, part := range arrContent {
-					partMap, ok := part.(map[string]interface{})
-					if !ok {
+			var anthropicContentParts []map[string]interface{}
+			for _, part := range parts {
+				switch part.Type {
+				case media.ContentTypeText:
+					anthropicContentParts = append(anthropicContentParts, map[string]interface{}{
+						"type": "text",
+						"text": part.Text,
+					})
+				case media.ContentTypeInputImage:
+					if part.Input == nil {
 						continue
 					}
-					partType, _ := partMap["type"].(string)
-					switch partType {
-					case "text":
-						anthropicContentParts = append(anthropicContentParts, map[string]interface{}{
-							"type": "text",
-							"text": partMap["text"],
-						})
-					case "image_url":
-						imageUrlObj, ok := partMap["image_url"].(map[string]interface{})
-						if ok {
-							urlStr, _ := imageUrlObj["url"].(string)
-							// Anthropic 需要分离 media_type 和 base64 数据
-							// data:image/jpeg;base64,...
-							// 这里需要一个辅助函数解析 urlStr，为简便，这里直接传 URL (需要具体实现 base64 提取)
-							anthropicContentParts = append(anthropicContentParts, map[string]interface{}{
-								"type": "image",
-								"source": map[string]interface{}{
-									"type":       "base64",
-									"media_type": "image/jpeg", // 简化，实际需从 url 解析
-									"data":       urlStr,       // 简化，实际需去前缀
-								},
-							})
-						}
+					resolved, err := media.ResolveMediaInput(req.Context(), *part.Input)
+					if err != nil {
+						return err
 					}
+					anthropicContentParts = append(anthropicContentParts, map[string]interface{}{
+						"type": "image",
+						"source": map[string]interface{}{
+							"type":       "base64",
+							"media_type": resolved.MimeType,
+							"data":       resolved.Base64Data,
+						},
+					})
 				}
-				content = anthropicContentParts
 			}
 
 			anthropicMessages = append(anthropicMessages, map[string]interface{}{
 				"role":    m.Role,
-				"content": content,
+				"content": anthropicContentParts,
 			})
 		}
 	}

@@ -3,7 +3,6 @@ package middleware
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -13,22 +12,12 @@ import (
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/config"
 	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/media"
 	"aihop.io/ainode/internal/utils"
 
 	"github.com/google/uuid"
 	"github.com/pkoukk/tiktoken-go"
 )
-
-// RequestPayload 用于解析客户端发来的 OpenAI 格式请求
-// 注意：为了透传插件等未知参数，我们使用 json.RawMessage 来保留原貌
-type RequestPayload struct {
-	Model    string `json:"model"`
-	Messages []struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	} `json:"messages"`
-	MaxTokens int `json:"max_tokens"`
-}
 
 // AuthAndPreDeductMiddleware 负责鉴权、解析请求体、预估 Token 并调用预扣费逻辑
 func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Handler {
@@ -64,7 +53,7 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			ctx = context.WithValue(ctx, "is_billing_route", true)
 
 			// 2. 解析请求体以获取 Model 和 Prompt
-			var payload RequestPayload
+			var payload *media.ChatCompletionRequest
 			if r.Body != nil {
 				// 1. OOM 防护：使用 LimitReader 限制最大读取量为 5MB (5 * 1024 * 1024)
 				// 防止恶意用户发送超大文件导致内存溢出
@@ -86,13 +75,15 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 				// 恢复 Body
 				r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-				if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+				parsedPayload, err := media.ParseChatCompletionRequest(bodyBytes)
+				if err != nil {
 					utils.WriteOpenAIError(w, http.StatusBadRequest, "Invalid JSON format", "invalid_request_error", "")
 					return
 				}
+				payload = parsedPayload
 			}
 
-			if payload.Model == "" {
+			if payload == nil || payload.Model == "" {
 				utils.WriteOpenAIError(w, http.StatusBadRequest, "Model is required", "invalid_request_error", "model_required")
 				return
 			}
@@ -142,7 +133,7 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 }
 
 // estimatePromptTokens 粗略估算输入的 Token 数量
-func estimatePromptTokens(model string, payload RequestPayload) int {
+func estimatePromptTokens(model string, payload *media.ChatCompletionRequest) int {
 	tkm, err := tiktoken.EncodingForModel(model)
 	if err != nil {
 		tkm, _ = tiktoken.GetEncoding("cl100k_base")
@@ -152,13 +143,7 @@ func estimatePromptTokens(model string, payload RequestPayload) int {
 		return 10 // 极度兜底
 	}
 
-	tokens := 0
-	for _, msg := range payload.Messages {
-		// 每条消息基础开销
-		tokens += 4
-		tokens += len(tkm.Encode(msg.Role, nil, nil))
-		tokens += len(tkm.Encode(msg.Content, nil, nil))
-	}
-	tokens += 2 // 对话级别的基础开销
-	return tokens
+	return media.EstimatePromptTokens(payload, func(value string) int {
+		return len(tkm.Encode(value, nil, nil))
+	})
 }
