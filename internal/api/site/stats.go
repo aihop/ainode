@@ -101,7 +101,6 @@ func (h *InternalHandler) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	var summary db.GetUserStatsSummaryRow
 	var trendSeries []db.GetUserTrendSeriesRow
 	var modelStats []db.GetUserModelStatsRow
-	var totalSpend int64
 
 	eg.Go(func() error {
 		var err error
@@ -132,14 +131,6 @@ func (h *InternalHandler) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			CreatedAt: pgStartTime,
 		})
 		return err
-	})
-
-	eg.Go(func() error {
-		// 累计(全时段)总支出，与所选 range 无关。失败不阻塞。
-		if t, terr := h.queries.GetUserTotalSpend(egCtx, int32(userID)); terr == nil {
-			totalSpend = t
-		}
-		return nil
 	})
 
 	if err := eg.Wait(); err != nil {
@@ -195,10 +186,8 @@ func (h *InternalHandler) StatsHandler(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"summary": map[string]interface{}{
-			"totalCost":        totalCost,                       // 所选 range(默认30天)内的支出
-			"totalSpend":       centsToMoneyPrecise(totalSpend), // 累计(全时段)总支出
-			"totalSpendCents":  totalSpend,
-			"subscriptionCost": 0, // 如果网关未来能区分哪部分钱扣自 grant_balance，可填充此值
+			"totalCost":        totalCost, // 所选 range(默认30天)内的支出；累计消耗请用 /api/site/wallet 的 spent
+			"subscriptionCost": 0,         // 如果网关未来能区分哪部分钱扣自 grant_balance，可填充此值
 			"flexCost":         totalCost,
 			"subscriptionPct":  0,
 			"flexPct":          100,

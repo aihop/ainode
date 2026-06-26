@@ -211,6 +211,7 @@ func main() {
 			// 服务间鉴权：校验 Internal Token（由 APayShop 服务端携带）
 			siteRouter.Use(middleware.InternalTokenAuth(adminToken))
 
+			siteRouter.Get("/api/site/wallet", siteHandler.WalletHandler)
 			siteRouter.Get("/api/site/stats", siteHandler.StatsHandler)
 			siteRouter.Get("/api/site/dashboard", siteHandler.DashboardHandler)
 			siteRouter.Get("/api/site/billing-logs/list", siteHandler.BillingLogsListHandler)

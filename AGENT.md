@@ -1,6 +1,12 @@
 # AI Node: 高性能 AI 模型网关与计费系统
 
 > **变更日志 (Changelog)**
+> `2026-06-27`: 新增独立钱包接口 `GET /api/site/wallet`（进账 funded / 用了 spent / 还剩 available + 现金/赠金明细），dashboard 移除钱包块回归活动概览，stats 去除重复的累计消耗（累计消耗唯一出口为 wallet.spent），见 Section 2 与 Section 6。
+> `2026-06-27`: 新增结算 outbox 兜底：`settlement_outbox` 表 + `internal/billing/outbox_relay.go`，asynq 投递失败时落库由后台 relay 重投，保证“Redis 已扣费但账单不丢”，见 Section 3 与 Section 4.1。
+> `2026-06-27`: 账单结算 Worker 改为单事务（幂等检查+双余额扣减+写流水同事务），修复重试重复扣 DB 余额；充值缓存改用原子 `INCRBY`（`lua/credit_cache.lua` + `CreditBalanceCache`），避免覆盖在途扣减导致超额消费，见 Section 4.1。
+> `2026-06-27`: 预扣不足补扣改用原子 `lua/compensate.lua`（带余额下限，绝不为负）；后台常驻协程统一经 `utils.SafeGo` 兜底 panic（防单点 panic 拖垮进程）；context key 收口到 `internal/reqctx`（消除 SA1029）；tiktoken 编码器按模型缓存（`utils.GetTokenizer`）。
+> `2026-06-27`: 限流阈值改为可配置（`server.rpm_limit` / `server.tpm_limit`，默认调高为 600 / 2,000,000）；金额展示新增 `centsToMoneyPrecise`（8 位精度，与 10^8 刻度对齐），账单/统计接口的消费金额改用高精度并附原始 `*Cents` 整数，避免小额被四舍五入成 0。
+> `2026-06-27`: `GET /api/site/models/groups` 从硬编码列表改为从 `GlobalModelManager`（models 表 active 模型）动态生成、按厂商分组并展示真实单价，见 Section 6。
 > `2026-06-26`: 厂商扩展内核从 `internal/adapter` 重构为 `internal/provider`，主链直接依赖 provider registry / strategy / model mapping，见 Section 2 与 Section 7。
 > `2026-06-26`: 新增 `internal/api/webhook/events.go` 通用事件入口，兼容 APayShop 的 HMAC 事件包并映射到内部 `transactions`；`transactions` 增加 `event_id` 幂等键，见 Section 2、Section 3 与 Section 4。
 > `2026-06-26`: 新增 `transactions` 统一资金总账，并让管理员直充同时写入 `transactions + balance_logs`，见 Section 3 与 Section 6。
@@ -139,6 +145,7 @@ AI 请严格按照以下结构组织代码：
 | `billing_logs` | 计费流水 | `user_id`, `model_name`, `amount_cents`, `prompt_tokens`, `completion_tokens` |
 | `transactions` | 统一资金总账 | `user_id`, `event_id`, `type`, `balance_type`, `direction`, `amount_cents`, `before_balance_cents`, `after_balance_cents`, `source_type`, `source_id` |
 | `balance_logs` | 余额变更流水 | `user_id`, `balance_type`, `action_type`, `amount_cents`, `before_balance_cents`, `after_balance_cents`, `operator_name`, `remark` |
+| `settlement_outbox` | 结算投递兜底（asynq 投递失败时落库，由 relay 重投） | `request_id`(唯一), `payload`(jsonb), `attempts`, `processed_at` |
 
 ### 双余额体系设计
 
