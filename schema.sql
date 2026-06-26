@@ -153,42 +153,8 @@ PARTITION BY
 
 -- 为 request_id 添加约束（如果需要，必须包含分区键，或者在业务层保证唯一性，这里我们移除 UNIQUE，靠应用层保证）
 
--- 创建 2026 年各月的分区表
-CREATE TABLE IF NOT EXISTS billing_logs_2026_04 PARTITION OF billing_logs FOR
-VALUES
-FROM ('2026-04-01') TO ('2026-05-01');
-
-CREATE TABLE IF NOT EXISTS billing_logs_2026_05 PARTITION OF billing_logs FOR
-VALUES
-FROM ('2026-05-01') TO ('2026-06-01');
-
-CREATE TABLE IF NOT EXISTS billing_logs_2026_06 PARTITION OF billing_logs FOR
-VALUES
-FROM ('2026-06-01') TO ('2026-07-01');
-
-CREATE TABLE IF NOT EXISTS billing_logs_2026_07 PARTITION OF billing_logs FOR
-VALUES
-FROM ('2026-07-01') TO ('2026-08-01');
-
-CREATE TABLE IF NOT EXISTS billing_logs_2026_08 PARTITION OF billing_logs FOR
-VALUES
-FROM ('2026-08-01') TO ('2026-09-01');
-
-CREATE TABLE IF NOT EXISTS billing_logs_2026_09 PARTITION OF billing_logs FOR
-VALUES
-FROM ('2026-09-01') TO ('2026-10-01');
-
-CREATE TABLE IF NOT EXISTS billing_logs_2026_10 PARTITION OF billing_logs FOR
-VALUES
-FROM ('2026-10-01') TO ('2026-11-01');
-
-CREATE TABLE IF NOT EXISTS billing_logs_2026_11 PARTITION OF billing_logs FOR
-VALUES
-FROM ('2026-11-01') TO ('2026-12-01');
-
-CREATE TABLE IF NOT EXISTS billing_logs_2026_12 PARTITION OF billing_logs FOR
-VALUES
-FROM ('2026-12-01') TO ('2027-01-01');
+-- 分区表改为启动时由 partition.go 动态创建，确保始终包含当前月 + 未来 6 个月
+-- 每日后台定时维护，避免人为遗忘
 
 -- 统一资金流水总账（先承接后台余额调整，后续扩展到支付/退款/扣费）
 CREATE TABLE IF NOT EXISTS transactions (
@@ -225,6 +191,41 @@ CREATE TABLE IF NOT EXISTS balance_logs (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
+-- 渠道失败日志（用于追查上游异常、限流与断路器熔断原因）
+CREATE TABLE IF NOT EXISTS channel_failure_logs (
+    id BIGSERIAL PRIMARY KEY,
+    channel_id INT NOT NULL REFERENCES channels (id) ON DELETE CASCADE,
+    request_id VARCHAR(100) NOT NULL DEFAULT '',
+    model_name VARCHAR(100) NOT NULL DEFAULT '',
+    provider VARCHAR(32) NOT NULL DEFAULT '',
+    upstream_base_url VARCHAR(255) NOT NULL DEFAULT '',
+    error_type VARCHAR(50) NOT NULL DEFAULT '',
+    status_code INT NOT NULL DEFAULT 0,
+    response_body TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    latency_ms INT NOT NULL DEFAULT 0,
+    circuit_state VARCHAR(20) NOT NULL DEFAULT 'closed',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+-- 用户侧模型失败日志（面向用户展示自己的模型请求失败记录）
+CREATE TABLE IF NOT EXISTS model_failure_logs (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    api_key_id INT REFERENCES api_keys (id) ON DELETE SET NULL,
+    request_id VARCHAR(100) NOT NULL DEFAULT '',
+    model_name VARCHAR(100) NOT NULL DEFAULT '',
+    provider VARCHAR(32) NOT NULL DEFAULT '',
+    error_type VARCHAR(50) NOT NULL DEFAULT '',
+    error_code VARCHAR(50) NOT NULL DEFAULT '',
+    status_code INT NOT NULL DEFAULT 0,
+    error_message TEXT NOT NULL DEFAULT '',
+    response_body TEXT NOT NULL DEFAULT '',
+    latency_ms INT NOT NULL DEFAULT 0,
+    is_retryable BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
 -- 添加索引
 CREATE INDEX IF NOT EXISTS idx_api_keys_key_string ON api_keys (key_string);
 
@@ -246,3 +247,13 @@ WHERE event_id IS NOT NULL AND event_id <> '';
 CREATE INDEX IF NOT EXISTS idx_balance_logs_user_created_at ON balance_logs (user_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_balance_logs_operator_created_at ON balance_logs (operator_admin_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_channel_failure_logs_channel_created_at ON channel_failure_logs (channel_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_channel_failure_logs_created_at ON channel_failure_logs (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_model_failure_logs_user_created_at ON model_failure_logs (user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_model_failure_logs_user_model_created_at ON model_failure_logs (user_id, model_name, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_model_failure_logs_request_id ON model_failure_logs (request_id);

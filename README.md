@@ -185,6 +185,7 @@ Base path: `/api/admin` (requires admin secret)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| GET | `/api/admin/providers` | List registered providers and their default metadata |
 | GET | `/api/admin/channels` | List all upstream channels |
 | POST | `/api/admin/channels` | Create a channel |
 | PUT | `/api/admin/channels/{id}` | Update a channel |

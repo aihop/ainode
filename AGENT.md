@@ -1,6 +1,7 @@
 # AI Node: 高性能 AI 模型网关与计费系统
 
 > **变更日志 (Changelog)**
+> `2026-06-26`: 厂商扩展内核从 `internal/adapter` 重构为 `internal/provider`，主链直接依赖 provider registry / strategy / model mapping，见 Section 2 与 Section 7。
 > `2026-06-26`: 新增 `internal/api/webhook/events.go` 通用事件入口，兼容 APayShop 的 HMAC 事件包并映射到内部 `transactions`；`transactions` 增加 `event_id` 幂等键，见 Section 2、Section 3 与 Section 4。
 > `2026-06-26`: 新增 `transactions` 统一资金总账，并让管理员直充同时写入 `transactions + balance_logs`，见 Section 3 与 Section 6。
 > `2026-06-26`: 新增 `balance_logs` 余额流水表与管理员直充审计链路，后台充值改为“写流水 + 同步 Redis 缓存”，见 Section 3 与 Section 6。
@@ -8,6 +9,9 @@
 > `2026-06-26`: 扩展 models/channels 多模态元数据字段，并引入 request 计费模式与图像生成入口约定，见 Section 3 与 Section 4.6。
 > `2026-06-26`: 新增 async_tasks 表与视频异步任务路由骨架，见 Section 3、Section 4.6 与 Section 6。
 > `2026-06-26`: 新增 `cmd/migrate` 与 `scripts/migrate.sh` 手动迁移入口，见 Section 2 与 Section 3。
+> `2026-06-26`: 移除 schema.sql 中硬编码的 2026 年 billing_logs 分区，改为 `internal/billing/partition.go` 动态创建，启动时自动生成当前月 + 未来 6 个月分区，后台每日定时维护，见 Section 6。
+> `2026-06-26`: 激活 `api_keys.quota_limit / quota_used` Key 级硬配额：鉴权中间件在预扣费前检查 `quota_used + 预估费 > quota_limit`，结算 Worker 在写账单后递增 `quota_used`；配额单位与金额同纬（cents），0 表示不限制，见 Section 3 与 Section 4.1。
+> `2026-06-26`: 管理员 API 鉴权从硬编码 `"admin-secret-key"` 改为读取 `internal.token` 配置，见 Section 6。
 
 ## 1. 项目定位与核心架构
 
@@ -41,11 +45,27 @@ AI 请严格按照以下结构组织代码：
 │   ├── proxy/               # ReverseProxy 核心逻辑、重试机制 (Fallback)
 │   │   ├── reverse_proxy.go # 自定义 Transport、ModifyResponse、ErrorHandler
 │   │   └── tally_reader.go  # SSE 流式拦截、Token 统计、断流止损
-│   ├── adapter/             # 多协议转换适配器
-│   │   ├── adapter.go       # ProviderAdapter 接口定义
-│   │   ├── openai.go        # OpenAI 透传
-│   │   ├── anthropic.go     # Claude 请求改写 + SSE 双向翻译
-│   │   └── gemini.go        # Gemini 请求改写 + SSE 双向翻译
+│   ├── provider/            # Provider 内核、注册中心、策略与厂商实现
+│   │   ├── contract.go      # Provider 契约、能力声明、异步任务接口
+│   │   ├── registry.go      # Provider 注册与获取
+│   │   ├── strategy.go      # 鉴权策略与错误翻译
+│   │   ├── model_mapping.go # 公共模型名 -> 上游模型名映射
+│   │   ├── openai/          # OpenAI Provider 与共享异步任务适配器
+│   │   ├── aimlapi/         # AI/ML API Provider (OpenAI-like)
+│   │   ├── anthropic/       # Anthropic Provider
+│   │   ├── cohere/          # Cohere Provider (OpenAI-like)
+│   │   ├── deepinfra/       # DeepInfra Provider (OpenAI-like)
+│   │   ├── deepseek/        # DeepSeek Provider (OpenAI-like)
+│   │   ├── fireworks/       # Fireworks AI Provider (OpenAI-like)
+│   │   ├── gemini/          # Gemini Provider
+│   │   ├── grok/            # Grok (xAI) Provider (OpenAI-like)
+│   │   ├── groq/            # Groq (LPU Inference) Provider (OpenAI-like)
+│   │   ├── ideogram/        # Ideogram Provider (OpenAI-like)
+│   │   ├── mistral/         # Mistral AI Provider (OpenAI-like)
+│   │   ├── openrouter/      # OpenRouter Provider (OpenAI-like)
+│   │   ├── perplexity/      # Perplexity Provider (OpenAI-like)
+│   │   ├── qwen/            # Qwen (Alibaba Cloud) Provider (OpenAI-like)
+│   │   └── together/        # Together AI Provider (OpenAI-like)
 │   ├── billing/             # 计费业务核心
 │   │   ├── lua/
 │   │   │   ├── pre_deduct.lua  # 预扣费原子脚本
@@ -54,7 +74,8 @@ AI 请严格按照以下结构组织代码：
 │   │   ├── settlement.go    # 多退少补结算逻辑
 │   │   └── redis.go         # Redis 余额操作
 │   ├── channel/             # 上游渠道池管理
-│   │   └── manager.go       # 内存缓存 + 加权轮询 + Pub/Sub 热刷新
+│   │   ├── manager.go       # 内存缓存 + 轮询调度 + capability 过滤
+│   │   └── circuit_breaker.go # 渠道断路器状态机与熔断恢复
 │   ├── db/                  # sqlc 生成的代码 (Querier, Models)
 │   │   ├── db.go
 │   │   ├── models.go
@@ -85,6 +106,7 @@ AI 请严格按照以下结构组织代码：
 ├── query.sql                # sqlc 查询语句定义
 ├── sqlc.yaml                # sqlc 配置文件
 ├── config.yaml              # 默认配置
+├── defaults.yaml          # 业务默认值（推荐模型、默认地址等）
 ├── README.md                # 英文文档
 ├── README.zh.md             # 中文文档
 ├── AGENT.md                 # AI 协作规范 (本文件)
@@ -110,7 +132,7 @@ AI 请严格按照以下结构组织代码：
 | 表名 | 用途 | 关键字段 |
 |------|------|---------|
 | `users` | 用户余额与订阅等级 | `cash_balance`, `grant_balance`, `tier_level`, `grant_expires_at` |
-| `api_keys` | 网关调用凭证 | `key_string`, `user_id`, `allowed_models`, `quota_limit` |
+| `api_keys` | 网关调用凭证 | `key_string`, `user_id`, `allowed_models`, `quota_limit`, `quota_used` |
 | `models` | 模型定价、模态、计费模式、倍率与并发上限 | `model_name`, `modality`, `pricing_mode`, `pricing_config`, `billing_policy`, `multiplier`, `max_concurrency` |
 | `channels` | 上游渠道配置 | `provider`, `base_url`, `api_key`, `models`, `protocol_type`, `upload_mode`, `model_mapping`, `supports_async`, `weight` |
 | `async_tasks` | 异步媒体任务状态与预扣费跟踪 | `request_id`, `task_type`, `provider`, `model_name`, `status`, `upstream_task_id`, `pre_deducted_cents`, `actual_cost_cents` |
@@ -125,7 +147,7 @@ AI 请严格按照以下结构组织代码：
 
 ### 计费流水分区
 
-`billing_logs` 按月分区（`billing_logs_YYYYMM`），需运维任务自动创建后续月份分区。
+`billing_logs` 按月分区（`billing_logs_YYYYMM`），分区表不再硬编码在 schema.sql 中，改为**启动时动态创建**：`internal/billing/partition.go` 确保当前月 + 未来 6 个月的分区已存在，并启动后台协程每日检查维护。
 
 ---
 
@@ -276,6 +298,7 @@ local billing_policy = ARGV[2] or "both"
 
 | 方法 | 路由 | 说明 |
 |------|------|------|
+| GET | `/api/admin/providers` | 返回当前已注册 Provider 列表及默认元信息 |
 | GET/POST | `/api/admin/channels` | 渠道列表/创建 |
 | PUT/DELETE | `/api/admin/channels/{id}` | 渠道更新/删除 |
 | GET/POST | `/api/admin/models` | 模型列表/创建 |
@@ -284,6 +307,12 @@ local billing_policy = ARGV[2] or "both"
 | GET | `/api/admin/users` | 用户余额/Token/请求量聚合列表 |
 | POST | `/api/admin/users/{id}/balance` | 管理员直充/赠送，并写入 `transactions + balance_logs` |
 | GET | `/api/admin/users/{id}/balance-logs` | 查询指定用户余额流水 |
+
+### Provider Catalog 配置
+
+- `GET /api/admin/providers` 返回给前端的 Provider 展示元信息，采用"代码默认值 + defaults.yaml 覆盖"的方式。
+- 高变化字段如 `default_base_url`、`recommended_models`、`recommended_model_presets`、`recommended_model_mapping` 应维护在 `defaults.yaml`，无需重新编译。
+- `internal/provider/*` 子包保留稳定的协议能力、鉴权策略、请求改写与错误翻译，不建议为了更新推荐模型频繁改代码。
 
 ### 用户 API (由 APayShop 服务端代理调用)
 
@@ -303,26 +332,58 @@ local billing_policy = ARGV[2] or "both"
 
 ---
 
-## 7. 厂商适配器接口
+## 7. 厂商 Provider 内核
 
-### `ProviderAdapter` 接口 (`internal/adapter/adapter.go`)
+### `ProviderAdapter` 接口 (`internal/provider/contract.go`)
 
 ```go
 type ProviderAdapter interface {
     // RewriteRequest 在转发前改写请求体、路径和头
-    RewriteRequest(req *http.Request, body []byte) ([]byte, error)
+    RewriteRequest(req *http.Request, modelName string) error
     // TransformSSEEvent 将上游的 SSE 事件翻译为 OpenAI 格式
     TransformSSEEvent(event []byte) ([]byte, error)
 }
 ```
 
-### 已实现适配器
+### 当前结构
+
+- `internal/provider/contract.go`: Provider 契约、能力声明、异步任务接口
+- `internal/provider/registry.go`: Provider 注册与获取
+- `internal/provider/strategy.go`: 鉴权策略与错误翻译
+- `internal/provider/model_mapping.go`: 公共模型名与上游模型名映射
+- `internal/provider/openai/`: OpenAI Provider 实现与共享异步适配器
+- `internal/provider/aimlapi/`: AI/ML API Provider 实现（OpenAI-like）
+- `internal/provider/anthropic/`: Anthropic Provider 实现
+- `internal/provider/deepseek/`: DeepSeek Provider 实现（OpenAI-like）
+- `internal/provider/gemini/`: Gemini Provider 实现
+- `internal/provider/grok/`: Grok (xAI) Provider 实现（OpenAI-like）
+- `internal/provider/groq/`: Groq (LPU Inference) Provider 实现（OpenAI-like）
+- `internal/provider/mistral/`: Mistral AI Provider 实现（OpenAI-like）
+- `internal/provider/openrouter/`: OpenRouter Provider 实现（OpenAI-like）
+- `internal/provider/qwen/`: Qwen (Alibaba Cloud) Provider 实现（OpenAI-like）
+- `internal/provider/together/`: Together AI Provider 实现（OpenAI-like）
+- `docs/ai/provider-extension.zh.md`: 新增厂商 Provider 的标准接入模板与检查清单
+
+### 已实现 Provider
 
 | 厂商 | 文件 | 说明 |
 |------|------|------|
-| OpenAI | [openai.go](ainode/internal/adapter/openai.go) | 透传，无改写 |
-| Anthropic | [anthropic.go](ainode/internal/adapter/anthropic.go#L1-L198) | 请求转 `/v1/messages`，SSE 翻译 `content_block_delta` → `choices[0].delta` |
-| Gemini | [gemini.go](ainode/internal/adapter/gemini.go#L1-L208) | 请求转 `/v1beta/models`，SSE 翻译原生格式 → OpenAI chunk |
+| OpenAI | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/openai/adapter.go) / [async.go](file:///Users/hugh/code/aihop/ainode/internal/provider/openai/async.go) | 透传请求，提供共享异步任务适配器 |
+| Anthropic | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/anthropic/adapter.go) | 请求转 `/v1/messages`，SSE 翻译 `content_block_delta` → `choices[0].delta` |
+| DeepSeek | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/deepseek/adapter.go) | 复用 OpenAI-like 请求改写与 Bearer 鉴权，默认声明 Chat / Stream 能力 |
+| Gemini | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/gemini/adapter.go) | 请求转 `/v1beta/models`，SSE 翻译原生格式 → OpenAI chunk |
+| Grok (xAI) | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/grok/adapter.go) | 复用 OpenAI-like 请求改写与 Bearer 鉴权，声明 Chat / Stream 能力 |
+| Cohere | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/cohere/adapter.go) | OpenAI-like，企业级嵌入与 RAG 模型 |
+| DeepInfra | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/deepinfra/adapter.go) | OpenAI-like，极致低价开源模型推理 |
+| Fireworks AI | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/fireworks/adapter.go) | OpenAI-like，LPU 级低延迟开源模型推理 |
+| Perplexity | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/perplexity/adapter.go) | OpenAI-like，搜索增强对话 |
+| Ideogram | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/ideogram/adapter.go) | OpenAI-like，文字渲染最强的图片生成 |
+| Qwen | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/qwen/adapter.go) | OpenAI-like，默认地址 DashScope |
+| Mistral | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/mistral/adapter.go) | OpenAI-like，EU 数据合规 |
+| Together AI | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/together/adapter.go) | OpenAI-like，开源模型托管 |
+| OpenRouter | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/openrouter/adapter.go) | OpenAI-like，统一多模型接入 |
+| Groq (LPU) | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/groq/adapter.go) | OpenAI-like，LPU 超低延迟推理 |
+| AI/ML API | [adapter.go](file:///Users/hugh/code/aihop/ainode/internal/provider/aimlapi/adapter.go) | OpenAI-like，400+ 模型聚合 |
 
 ---
 

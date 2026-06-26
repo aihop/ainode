@@ -218,6 +218,7 @@ client = OpenAI(
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
+| GET | `/api/admin/providers` | 返回当前已注册 Provider 列表及默认元信息 |
 | GET | `/api/admin/channels` | 列出所有上游渠道 |
 | POST | `/api/admin/channels` | 创建渠道 |
 | PUT | `/api/admin/channels/{id}` | 更新渠道 |

@@ -27,6 +27,7 @@ const TaskRecordBillingLog = "billing:record_log"
 // SettlementRequest 结算请求参数
 type SettlementRequest struct {
 	UserID           int32  `json:"user_id"`
+	ApiKeyID         int32  `json:"api_key_id"`
 	ChannelID        int32  `json:"channel_id"`
 	ModelName        string `json:"model_name"`
 	PromptTokens     int32  `json:"prompt_tokens"`

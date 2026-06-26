@@ -62,6 +62,19 @@ func (q *Queries) CountBillingLogs(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countChannelFailureLogsByChannel = `-- name: CountChannelFailureLogsByChannel :one
+SELECT COUNT(*)
+FROM channel_failure_logs
+WHERE channel_id = $1
+`
+
+func (q *Queries) CountChannelFailureLogsByChannel(ctx context.Context, channelID int32) (int64, error) {
+	row := q.db.QueryRow(ctx, countChannelFailureLogsByChannel, channelID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUserBillingLogs = `-- name: CountUserBillingLogs :one
 SELECT COUNT(*)
 FROM billing_logs
@@ -78,6 +91,27 @@ type CountUserBillingLogsParams struct {
 
 func (q *Queries) CountUserBillingLogs(ctx context.Context, arg CountUserBillingLogsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countUserBillingLogs, arg.UserID, arg.ModelName, arg.StartTime)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countUserModelFailureLogs = `-- name: CountUserModelFailureLogs :one
+SELECT COUNT(*)
+FROM model_failure_logs
+WHERE user_id = $1
+  AND ($2::varchar = '' OR model_name = $2)
+  AND created_at >= $3
+`
+
+type CountUserModelFailureLogsParams struct {
+	UserID    int32
+	ModelName string
+	StartTime pgtype.Timestamptz
+}
+
+func (q *Queries) CountUserModelFailureLogs(ctx context.Context, arg CountUserModelFailureLogsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserModelFailureLogs, arg.UserID, arg.ModelName, arg.StartTime)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -452,6 +486,55 @@ func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) (C
 	return i, err
 }
 
+const createChannelFailureLog = `-- name: CreateChannelFailureLog :exec
+INSERT INTO channel_failure_logs (
+    channel_id,
+    request_id,
+    model_name,
+    provider,
+    upstream_base_url,
+    error_type,
+    status_code,
+    response_body,
+    error_message,
+    latency_ms,
+    circuit_state
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+)
+`
+
+type CreateChannelFailureLogParams struct {
+	ChannelID       int32
+	RequestID       string
+	ModelName       string
+	Provider        string
+	UpstreamBaseUrl string
+	ErrorType       string
+	StatusCode      int32
+	ResponseBody    string
+	ErrorMessage    string
+	LatencyMs       int32
+	CircuitState    string
+}
+
+func (q *Queries) CreateChannelFailureLog(ctx context.Context, arg CreateChannelFailureLogParams) error {
+	_, err := q.db.Exec(ctx, createChannelFailureLog,
+		arg.ChannelID,
+		arg.RequestID,
+		arg.ModelName,
+		arg.Provider,
+		arg.UpstreamBaseUrl,
+		arg.ErrorType,
+		arg.StatusCode,
+		arg.ResponseBody,
+		arg.ErrorMessage,
+		arg.LatencyMs,
+		arg.CircuitState,
+	)
+	return err
+}
+
 const createModel = `-- name: CreateModel :one
 INSERT INTO
     models (
@@ -531,6 +614,58 @@ func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (Model
 		&i.Status,
 	)
 	return i, err
+}
+
+const createModelFailureLog = `-- name: CreateModelFailureLog :exec
+INSERT INTO model_failure_logs (
+    user_id,
+    api_key_id,
+    request_id,
+    model_name,
+    provider,
+    error_type,
+    error_code,
+    status_code,
+    error_message,
+    response_body,
+    latency_ms,
+    is_retryable
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+)
+`
+
+type CreateModelFailureLogParams struct {
+	UserID       int32
+	ApiKeyID     pgtype.Int4
+	RequestID    string
+	ModelName    string
+	Provider     string
+	ErrorType    string
+	ErrorCode    string
+	StatusCode   int32
+	ErrorMessage string
+	ResponseBody string
+	LatencyMs    int32
+	IsRetryable  bool
+}
+
+func (q *Queries) CreateModelFailureLog(ctx context.Context, arg CreateModelFailureLogParams) error {
+	_, err := q.db.Exec(ctx, createModelFailureLog,
+		arg.UserID,
+		arg.ApiKeyID,
+		arg.RequestID,
+		arg.ModelName,
+		arg.Provider,
+		arg.ErrorType,
+		arg.ErrorCode,
+		arg.StatusCode,
+		arg.ErrorMessage,
+		arg.ResponseBody,
+		arg.LatencyMs,
+		arg.IsRetryable,
+	)
+	return err
 }
 
 const createTransaction = `-- name: CreateTransaction :one
@@ -865,6 +1000,8 @@ SELECT
     model_name,
     prompt_tokens,
     completion_tokens,
+    cache_hit_tokens,
+    cache_miss_tokens,
     amount_cents
 FROM billing_logs
 WHERE user_id = $1
@@ -888,6 +1025,8 @@ type GetUserBillingLogsRow struct {
 	ModelName        string
 	PromptTokens     pgtype.Int4
 	CompletionTokens pgtype.Int4
+	CacheHitTokens   pgtype.Int4
+	CacheMissTokens  pgtype.Int4
 	AmountCents      int64
 }
 
@@ -912,6 +1051,8 @@ func (q *Queries) GetUserBillingLogs(ctx context.Context, arg GetUserBillingLogs
 			&i.ModelName,
 			&i.PromptTokens,
 			&i.CompletionTokens,
+			&i.CacheHitTokens,
+			&i.CacheMissTokens,
 			&i.AmountCents,
 		); err != nil {
 			return nil, err
@@ -1058,6 +1199,79 @@ func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id int32) (User, err
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getUserModelFailureLogs = `-- name: GetUserModelFailureLogs :many
+SELECT
+    id,
+    user_id,
+    api_key_id,
+    request_id,
+    model_name,
+    provider,
+    error_type,
+    error_code,
+    status_code,
+    error_message,
+    response_body,
+    latency_ms,
+    is_retryable,
+    created_at
+FROM model_failure_logs
+WHERE user_id = $1
+  AND ($2::varchar = '' OR model_name = $2)
+  AND created_at >= $3
+ORDER BY created_at DESC, id DESC
+LIMIT $5 OFFSET $4
+`
+
+type GetUserModelFailureLogsParams struct {
+	UserID    int32
+	ModelName string
+	StartTime pgtype.Timestamptz
+	OffsetVal int32
+	LimitVal  int32
+}
+
+func (q *Queries) GetUserModelFailureLogs(ctx context.Context, arg GetUserModelFailureLogsParams) ([]ModelFailureLog, error) {
+	rows, err := q.db.Query(ctx, getUserModelFailureLogs,
+		arg.UserID,
+		arg.ModelName,
+		arg.StartTime,
+		arg.OffsetVal,
+		arg.LimitVal,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ModelFailureLog
+	for rows.Next() {
+		var i ModelFailureLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ApiKeyID,
+			&i.RequestID,
+			&i.ModelName,
+			&i.Provider,
+			&i.ErrorType,
+			&i.ErrorCode,
+			&i.StatusCode,
+			&i.ErrorMessage,
+			&i.ResponseBody,
+			&i.LatencyMs,
+			&i.IsRetryable,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUserModelStats = `-- name: GetUserModelStats :many
@@ -1256,6 +1470,20 @@ func (q *Queries) GetUsersSummaryForAdmin(ctx context.Context, keyword string) (
 		&i.TotalActiveKeys,
 	)
 	return i, err
+}
+
+const incrementAPIKeyQuotaUsed = `-- name: IncrementAPIKeyQuotaUsed :exec
+UPDATE api_keys SET quota_used = quota_used + $2 WHERE id = $1
+`
+
+type IncrementAPIKeyQuotaUsedParams struct {
+	ID        int32
+	QuotaUsed pgtype.Int8
+}
+
+func (q *Queries) IncrementAPIKeyQuotaUsed(ctx context.Context, arg IncrementAPIKeyQuotaUsedParams) error {
+	_, err := q.db.Exec(ctx, incrementAPIKeyQuotaUsed, arg.ID, arg.QuotaUsed)
+	return err
 }
 
 const listActiveChannels = `-- name: ListActiveChannels :many
@@ -1534,6 +1762,68 @@ func (q *Queries) ListBillingLogs(ctx context.Context, arg ListBillingLogsParams
 			&i.CacheMissTokens,
 			&i.AmountCents,
 			&i.RequestID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChannelFailureLogsByChannel = `-- name: ListChannelFailureLogsByChannel :many
+SELECT
+    id,
+    channel_id,
+    request_id,
+    model_name,
+    provider,
+    upstream_base_url,
+    error_type,
+    status_code,
+    response_body,
+    error_message,
+    latency_ms,
+    circuit_state,
+    created_at
+FROM channel_failure_logs
+WHERE channel_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT $3
+OFFSET $2
+`
+
+type ListChannelFailureLogsByChannelParams struct {
+	ChannelID int32
+	OffsetVal int32
+	LimitVal  int32
+}
+
+func (q *Queries) ListChannelFailureLogsByChannel(ctx context.Context, arg ListChannelFailureLogsByChannelParams) ([]ChannelFailureLog, error) {
+	rows, err := q.db.Query(ctx, listChannelFailureLogsByChannel, arg.ChannelID, arg.OffsetVal, arg.LimitVal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChannelFailureLog
+	for rows.Next() {
+		var i ChannelFailureLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChannelID,
+			&i.RequestID,
+			&i.ModelName,
+			&i.Provider,
+			&i.UpstreamBaseUrl,
+			&i.ErrorType,
+			&i.StatusCode,
+			&i.ResponseBody,
+			&i.ErrorMessage,
+			&i.LatencyMs,
+			&i.CircuitState,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

@@ -481,6 +481,97 @@ INSERT INTO balance_logs (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 );
 
+-- name: CreateChannelFailureLog :exec
+INSERT INTO channel_failure_logs (
+    channel_id,
+    request_id,
+    model_name,
+    provider,
+    upstream_base_url,
+    error_type,
+    status_code,
+    response_body,
+    error_message,
+    latency_ms,
+    circuit_state
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+);
+
+-- name: ListChannelFailureLogsByChannel :many
+SELECT
+    id,
+    channel_id,
+    request_id,
+    model_name,
+    provider,
+    upstream_base_url,
+    error_type,
+    status_code,
+    response_body,
+    error_message,
+    latency_ms,
+    circuit_state,
+    created_at
+FROM channel_failure_logs
+WHERE channel_id = sqlc.arg(channel_id)
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(limit_val)
+OFFSET sqlc.arg(offset_val);
+
+-- name: CountChannelFailureLogsByChannel :one
+SELECT COUNT(*)
+FROM channel_failure_logs
+WHERE channel_id = $1;
+
+-- name: CreateModelFailureLog :exec
+INSERT INTO model_failure_logs (
+    user_id,
+    api_key_id,
+    request_id,
+    model_name,
+    provider,
+    error_type,
+    error_code,
+    status_code,
+    error_message,
+    response_body,
+    latency_ms,
+    is_retryable
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+);
+
+-- name: GetUserModelFailureLogs :many
+SELECT
+    id,
+    user_id,
+    api_key_id,
+    request_id,
+    model_name,
+    provider,
+    error_type,
+    error_code,
+    status_code,
+    error_message,
+    response_body,
+    latency_ms,
+    is_retryable,
+    created_at
+FROM model_failure_logs
+WHERE user_id = sqlc.arg(user_id)
+  AND (sqlc.arg(model_name)::varchar = '' OR model_name = sqlc.arg(model_name))
+  AND created_at >= sqlc.arg(start_time)
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(limit_val) OFFSET sqlc.arg(offset_val);
+
+-- name: CountUserModelFailureLogs :one
+SELECT COUNT(*)
+FROM model_failure_logs
+WHERE user_id = sqlc.arg(user_id)
+  AND (sqlc.arg(model_name)::varchar = '' OR model_name = sqlc.arg(model_name))
+  AND created_at >= sqlc.arg(start_time);
+
 -- name: ListBalanceLogsByUser :many
 SELECT
     id,
@@ -594,6 +685,8 @@ SELECT
     model_name,
     prompt_tokens,
     completion_tokens,
+    cache_hit_tokens,
+    cache_miss_tokens,
     amount_cents
 FROM billing_logs
 WHERE user_id = sqlc.arg(user_id)
@@ -652,3 +745,6 @@ UPDATE api_keys SET name = $1 WHERE id = $2 AND user_id = $3;
 
 -- name: RotateAPIKey :exec
 UPDATE api_keys SET key_string = $1 WHERE id = $2 AND user_id = $3;
+
+-- name: IncrementAPIKeyQuotaUsed :exec
+UPDATE api_keys SET quota_used = quota_used + $2 WHERE id = $1;

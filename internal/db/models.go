@@ -77,132 +77,6 @@ type BillingLog struct {
 	CreatedAt        pgtype.Timestamptz
 }
 
-type BillingLogs202604 struct {
-	ID               pgtype.UUID
-	UserID           pgtype.Int4
-	ChannelID        pgtype.Int4
-	ModelName        string
-	PromptTokens     pgtype.Int4
-	CompletionTokens pgtype.Int4
-	CacheHitTokens   pgtype.Int4
-	CacheMissTokens  pgtype.Int4
-	AmountCents      int64
-	RequestID        pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-}
-
-type BillingLogs202605 struct {
-	ID               pgtype.UUID
-	UserID           pgtype.Int4
-	ChannelID        pgtype.Int4
-	ModelName        string
-	PromptTokens     pgtype.Int4
-	CompletionTokens pgtype.Int4
-	CacheHitTokens   pgtype.Int4
-	CacheMissTokens  pgtype.Int4
-	AmountCents      int64
-	RequestID        pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-}
-
-type BillingLogs202606 struct {
-	ID               pgtype.UUID
-	UserID           pgtype.Int4
-	ChannelID        pgtype.Int4
-	ModelName        string
-	PromptTokens     pgtype.Int4
-	CompletionTokens pgtype.Int4
-	CacheHitTokens   pgtype.Int4
-	CacheMissTokens  pgtype.Int4
-	AmountCents      int64
-	RequestID        pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-}
-
-type BillingLogs202607 struct {
-	ID               pgtype.UUID
-	UserID           pgtype.Int4
-	ChannelID        pgtype.Int4
-	ModelName        string
-	PromptTokens     pgtype.Int4
-	CompletionTokens pgtype.Int4
-	CacheHitTokens   pgtype.Int4
-	CacheMissTokens  pgtype.Int4
-	AmountCents      int64
-	RequestID        pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-}
-
-type BillingLogs202608 struct {
-	ID               pgtype.UUID
-	UserID           pgtype.Int4
-	ChannelID        pgtype.Int4
-	ModelName        string
-	PromptTokens     pgtype.Int4
-	CompletionTokens pgtype.Int4
-	CacheHitTokens   pgtype.Int4
-	CacheMissTokens  pgtype.Int4
-	AmountCents      int64
-	RequestID        pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-}
-
-type BillingLogs202609 struct {
-	ID               pgtype.UUID
-	UserID           pgtype.Int4
-	ChannelID        pgtype.Int4
-	ModelName        string
-	PromptTokens     pgtype.Int4
-	CompletionTokens pgtype.Int4
-	CacheHitTokens   pgtype.Int4
-	CacheMissTokens  pgtype.Int4
-	AmountCents      int64
-	RequestID        pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-}
-
-type BillingLogs202610 struct {
-	ID               pgtype.UUID
-	UserID           pgtype.Int4
-	ChannelID        pgtype.Int4
-	ModelName        string
-	PromptTokens     pgtype.Int4
-	CompletionTokens pgtype.Int4
-	CacheHitTokens   pgtype.Int4
-	CacheMissTokens  pgtype.Int4
-	AmountCents      int64
-	RequestID        pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-}
-
-type BillingLogs202611 struct {
-	ID               pgtype.UUID
-	UserID           pgtype.Int4
-	ChannelID        pgtype.Int4
-	ModelName        string
-	PromptTokens     pgtype.Int4
-	CompletionTokens pgtype.Int4
-	CacheHitTokens   pgtype.Int4
-	CacheMissTokens  pgtype.Int4
-	AmountCents      int64
-	RequestID        pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-}
-
-type BillingLogs202612 struct {
-	ID               pgtype.UUID
-	UserID           pgtype.Int4
-	ChannelID        pgtype.Int4
-	ModelName        string
-	PromptTokens     pgtype.Int4
-	CompletionTokens pgtype.Int4
-	CacheHitTokens   pgtype.Int4
-	CacheMissTokens  pgtype.Int4
-	AmountCents      int64
-	RequestID        pgtype.Text
-	CreatedAt        pgtype.Timestamptz
-}
-
 type Channel struct {
 	ID            int32
 	Name          string
@@ -216,6 +90,22 @@ type Channel struct {
 	SupportsAsync bool
 	Weight        pgtype.Int4
 	Status        pgtype.Int4
+}
+
+type ChannelFailureLog struct {
+	ID              int64
+	ChannelID       int32
+	RequestID       string
+	ModelName       string
+	Provider        string
+	UpstreamBaseUrl string
+	ErrorType       string
+	StatusCode      int32
+	ResponseBody    string
+	ErrorMessage    string
+	LatencyMs       int32
+	CircuitState    string
+	CreatedAt       pgtype.Timestamptz
 }
 
 type Model struct {
@@ -232,6 +122,23 @@ type Model struct {
 	PricingConfig       []byte
 	MaxConcurrency      int32
 	Status              pgtype.Int4
+}
+
+type ModelFailureLog struct {
+	ID           int64
+	UserID       int32
+	ApiKeyID     pgtype.Int4
+	RequestID    string
+	ModelName    string
+	Provider     string
+	ErrorType    string
+	ErrorCode    string
+	StatusCode   int32
+	ErrorMessage string
+	ResponseBody string
+	LatencyMs    int32
+	IsRetryable  bool
+	CreatedAt    pgtype.Timestamptz
 }
 
 type Transaction struct {

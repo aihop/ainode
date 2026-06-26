@@ -27,6 +27,22 @@ import (
 	"aihop.io/ainode/internal/config"
 	"aihop.io/ainode/internal/db"
 	"aihop.io/ainode/internal/middleware"
+	_ "aihop.io/ainode/internal/provider/aimlapi"
+	_ "aihop.io/ainode/internal/provider/anthropic"
+	_ "aihop.io/ainode/internal/provider/cohere"
+	_ "aihop.io/ainode/internal/provider/deepinfra"
+	_ "aihop.io/ainode/internal/provider/deepseek"
+	_ "aihop.io/ainode/internal/provider/fireworks"
+	_ "aihop.io/ainode/internal/provider/gemini"
+	_ "aihop.io/ainode/internal/provider/grok"
+	_ "aihop.io/ainode/internal/provider/groq"
+	_ "aihop.io/ainode/internal/provider/ideogram"
+	_ "aihop.io/ainode/internal/provider/mistral"
+	_ "aihop.io/ainode/internal/provider/openai"
+	_ "aihop.io/ainode/internal/provider/openrouter"
+	_ "aihop.io/ainode/internal/provider/perplexity"
+	_ "aihop.io/ainode/internal/provider/qwen"
+	_ "aihop.io/ainode/internal/provider/together"
 	"aihop.io/ainode/internal/proxy"
 	"aihop.io/ainode/internal/worker"
 )
@@ -62,6 +78,14 @@ func main() {
 		log.Printf("Warning: Could not read schema.sql: %v", err)
 	}
 
+	// 3.2 确保 billing_logs 分区表已创建（当前月 + 未来 6 个月）
+	// 硬编码分区在 schema.sql 中已移除，改为启动时动态创建 + 定时维护
+	if err := billing.EnsureBillingLogPartitions(ctx, pool, billing.EnsurePartitionsMonthsAhead); err != nil {
+		log.Printf("Warning: Failed to ensure billing_logs partitions: %v", err)
+	} else {
+		log.Println("Billing_logs partitions verified")
+	}
+
 	queries := db.New(pool)
 
 	// 4. 初始化内存缓存管理器
@@ -72,6 +96,9 @@ func main() {
 	syncCtx, cancelSync := context.WithCancel(context.Background())
 	defer cancelSync()
 	config.StartBackgroundSync(syncCtx, queries, 5*time.Minute)
+
+	// 启动分区定时维护任务 (每天检查并创建未来月份的分区)
+	billing.StartPartitionMaintenance(syncCtx, pool)
 
 	// 5. 初始化并启动 Asynq Worker (后台任务消费者)
 	srvAsynq := asynq.NewServer(
@@ -125,13 +152,14 @@ func main() {
 		// ==========================
 		// 1. Admin API 路由组 (需鉴权)
 		// ==========================
+		adminToken := config.AppConfig.Internal.Token
 		r.Group(func(adminRouter chi.Router) {
 			adminRouter.Use(func(next http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					// 简单鉴权：校验 Admin Token
-					// TODO: 生产环境应从 config 或 DB 读取 Admin Token，或使用 JWT
+					// 服务间鉴权：校验 Internal Token（由 APayShop 服务端携带）
 					authHeader := r.Header.Get("Authorization")
-					if authHeader != "Bearer admin-secret-key" {
+					expectedAuth := "Bearer " + adminToken
+					if adminToken == "" || authHeader != expectedAuth {
 						http.Error(w, `{"error":"Unauthorized"}`, http.StatusUnauthorized)
 						return
 					}
@@ -142,7 +170,12 @@ func main() {
 			adminHandler := admin.NewAdminHandler(queries, pool)
 
 			// Channels
+			adminRouter.Get("/api/admin/providers", adminHandler.ListProviders)
 			adminRouter.Get("/api/admin/channels", adminHandler.ListChannels)
+			adminRouter.Get("/api/admin/channels/health", adminHandler.ListChannelHealth)
+			adminRouter.Get("/api/admin/channels/{id}/failures", adminHandler.ListChannelFailureLogs)
+			adminRouter.Post("/api/admin/channels/{id}/reset-circuit", adminHandler.ResetChannelCircuitBreaker)
+			adminRouter.Post("/api/admin/channels/{id}/probe", adminHandler.ProbeChannel)
 			adminRouter.Post("/api/admin/channels", adminHandler.CreateChannel)
 			adminRouter.Put("/api/admin/channels/{id}", adminHandler.UpdateChannel)
 			adminRouter.Delete("/api/admin/channels/{id}", adminHandler.DeleteChannel)
@@ -171,6 +204,7 @@ func main() {
 			siteRouter.Get("/api/site/stats", siteHandler.StatsHandler)
 			siteRouter.Get("/api/site/dashboard", siteHandler.DashboardHandler)
 			siteRouter.Get("/api/site/billing-logs/list", siteHandler.BillingLogsListHandler)
+			siteRouter.Get("/api/site/model-failure-logs/list", siteHandler.ModelFailureLogsListHandler)
 			siteRouter.Get("/api/site/api-keys/list", siteHandler.ListAPIKeysHandler)
 			siteRouter.Post("/api/site/api-keys/create", siteHandler.CreateAPIKeyHandler)
 			siteRouter.Post("/api/site/api-keys/delete", siteHandler.DeleteAPIKeyHandler)

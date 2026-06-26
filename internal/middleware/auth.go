@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/config"
@@ -16,6 +17,7 @@ import (
 	"aihop.io/ainode/internal/utils"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/pkoukk/tiktoken-go"
 )
 
@@ -24,6 +26,7 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
+			ctx = context.WithValue(ctx, "request_start_time", time.Now())
 
 			// 1. 提取并校验 API Key
 			authHeader := r.Header.Get("Authorization")
@@ -39,6 +42,7 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 				return
 			}
 			ctx = context.WithValue(ctx, "user_id", user.ID)
+			ctx = context.WithValue(ctx, "api_key_id", user.KeyID)
 
 			// 如果不是主要的计费接口（比如 /v1/models 或 /v1/dashboard），直接放行
 			// 我们主要拦截会产生大量消耗的生成接口
@@ -132,8 +136,31 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			modelInfo, err := config.GlobalModelManager.GetModel(ctx, queries, modelName)
 			if err != nil {
 				log.Printf("Model %s not found in DB, using fallback pricing", modelName)
+				logMiddlewareFailure(queries, ctx, http.StatusBadRequest, modelName, "invalid_request_error", "unsupported_model", fmt.Sprintf("Unsupported model: %s", modelName))
 				utils.WriteOpenAIError(w, http.StatusBadRequest, fmt.Sprintf("Unsupported model: %s", modelName), "invalid_request_error", "unsupported_model")
 				return
+			}
+
+			// 3.1 校验模型 modality 是否匹配当前路由类型
+			expectedModality := "text"
+			switch {
+			case isImageRoute:
+				expectedModality = "image"
+			case isVideoRoute:
+				expectedModality = "video"
+			case isChatRoute:
+				expectedModality = "text" // text 和 vision 都允许走 chat 路由
+			}
+			if modelInfo.Modality != expectedModality {
+				// vision 模型可以走 chat 路由（多模态对话）
+				if !(isChatRoute && modelInfo.Modality == "vision") {
+					logMiddlewareFailure(queries, ctx, http.StatusBadRequest, modelName, "invalid_request_error", "modality_mismatch",
+						fmt.Sprintf("Model %s modality %q does not match route type %q", modelName, modelInfo.Modality, requestType))
+					utils.WriteOpenAIError(w, http.StatusBadRequest,
+						fmt.Sprintf("Model %q is a %s model and cannot be used on this endpoint", modelName, modelInfo.Modality),
+						"invalid_request_error", "modality_mismatch")
+					return
+				}
 			}
 
 			// 计算预扣费：先算基础成本，再应用倍率。预扣费使用向上取整，避免低估。
@@ -151,9 +178,24 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 				estimatedCostCents = 1
 			}
 
+			// 4.5 检查 API Key 级配额限制 (Key 生命周期累计消费上限)
+			if user.QuotaLimit.Valid && user.QuotaLimit.Int64 > 0 {
+				currentUsed := int64(0)
+				if user.QuotaUsed.Valid {
+					currentUsed = user.QuotaUsed.Int64
+				}
+				if currentUsed+estimatedCostCents > user.QuotaLimit.Int64 {
+					logMiddlewareFailure(queries, ctx, http.StatusPaymentRequired, modelName, "billing_error", "key_quota_exceeded",
+						fmt.Sprintf("API Key quota exceeded: used %d + estimated %d > limit %d cents", currentUsed, estimatedCostCents, user.QuotaLimit.Int64))
+					utils.WriteOpenAIError(w, http.StatusPaymentRequired, "API Key quota exceeded", "invalid_request_error", "insufficient_quota")
+					return
+				}
+			}
+
 			// 5. 调用预扣费 (如果余额不足会返回错误)
 			grantDeducted, cashDeducted, err := billing.PreDeduct(ctx, queries, user.ID, estimatedCostCents, modelInfo.BillingPolicy)
 			if err != nil {
+				logMiddlewareFailure(queries, ctx, http.StatusPaymentRequired, modelName, "billing_error", "insufficient_quota", "Insufficient balance")
 				utils.WriteOpenAIError(w, http.StatusPaymentRequired, "Insufficient balance", "invalid_request_error", "insufficient_quota")
 				return
 			}
@@ -162,6 +204,8 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 
 			// 6. 将核心数据注入 Context 供后续中间件 (限流) 和 Proxy 结算使用
 			ctx = context.WithValue(ctx, "model_name", modelName)
+			ctx = context.WithValue(ctx, "public_model_name", modelName)
+			ctx = context.WithValue(ctx, "upstream_model_name", modelName)
 			ctx = context.WithValue(ctx, "request_type", requestType)
 			ctx = context.WithValue(ctx, "prompt_tokens", promptTokens)
 			ctx = context.WithValue(ctx, "pre_deducted_cents", estimatedCostCents)
@@ -203,4 +247,37 @@ func estimatePlainTextTokens(model, text string) int {
 	}
 
 	return len(tkm.Encode(text, nil, nil))
+}
+
+// logMiddlewareFailure 在鉴权/预扣费阶段将用户侧失败记录到 model_failure_logs
+func logMiddlewareFailure(queries *db.Queries, ctx context.Context, statusCode int, modelName, errorType, errorCode, errorMessage string) {
+	if queries == nil || statusCode <= 0 {
+		return
+	}
+
+	userID, _ := ctx.Value("user_id").(int32)
+	if userID <= 0 {
+		return
+	}
+
+	apiKeyID, _ := ctx.Value("api_key_id").(int32)
+
+	latencyMs := int32(0)
+	if startedAt, ok := ctx.Value("request_start_time").(time.Time); ok {
+		latencyMs = int32(time.Since(startedAt).Milliseconds())
+	}
+
+	params := db.CreateModelFailureLogParams{
+		UserID:       userID,
+		ApiKeyID:     pgtype.Int4{Int32: apiKeyID, Valid: apiKeyID > 0},
+		ModelName:    modelName,
+		ErrorType:    errorType,
+		ErrorCode:    errorCode,
+		StatusCode:   int32(statusCode),
+		ErrorMessage: errorMessage,
+		LatencyMs:    latencyMs,
+		IsRetryable:  false,
+	}
+
+	_ = queries.CreateModelFailureLog(context.Background(), params)
 }

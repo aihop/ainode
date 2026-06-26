@@ -33,4 +33,22 @@ var (
 		},
 		[]string{"model", "channel", "type"}, // type: prompt / completion
 	)
+
+	// CircuitBreakerState 记录渠道断路器状态：0=closed, 1=half_open, 2=open
+	CircuitBreakerState = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "ainode_channel_circuit_breaker_state",
+			Help: "Current circuit breaker state of each channel",
+		},
+		[]string{"channel"},
+	)
+
+	// CircuitBreakerEventsTotal 记录断路器成功/失败事件次数
+	CircuitBreakerEventsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ainode_channel_circuit_breaker_events_total",
+			Help: "Total circuit breaker events by channel and result",
+		},
+		[]string{"channel", "result"},
+	)
 )

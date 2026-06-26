@@ -7,11 +7,11 @@ import (
 	"io"
 	"net/http"
 
-	"aihop.io/ainode/internal/adapter"
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/channel"
 	"aihop.io/ainode/internal/db"
 	"aihop.io/ainode/internal/media"
+	"aihop.io/ainode/internal/provider"
 	"aihop.io/ainode/internal/utils"
 
 	"github.com/go-chi/chi/v5"
@@ -83,14 +83,24 @@ func (h *GatewayHandler) CreateVideoGenerationTask(w http.ResponseWriter, r *htt
 		return
 	}
 
-	ch, err := channel.GlobalManager.GetNextAsyncChannel(req.Model)
+	ch, err := channel.GlobalManager.GetNextChannelForCapabilities(req.Model, provider.ProviderCapabilities{
+		Video:     true,
+		AsyncTask: true,
+	})
 	if err != nil {
 		task = h.failTaskAndRefund(ctx, task, http.StatusBadGateway, fmt.Sprintf("No async channel available for model: %s", req.Model))
 		utils.WriteOpenAIError(w, http.StatusBadGateway, "No async channel available", "server_error", "async_channel_unavailable")
 		return
 	}
 
-	asyncAdapter := adapter.GetAsyncTaskAdapter(ch.Provider)
+	driver := provider.GetProvider(ch.Provider)
+	asyncAdapter := driver.Async()
+	if asyncAdapter == nil {
+		task = h.failTaskAndRefund(ctx, task, http.StatusBadGateway, fmt.Sprintf("provider %s does not support async tasks", ch.Provider))
+		utils.WriteOpenAIError(w, http.StatusBadGateway, "Provider does not support async tasks", "server_error", "async_provider_unsupported")
+		return
+	}
+	upstreamModelName := provider.ResolveUpstreamModelName(*ch, req.Model)
 	submitResp, submitErr := asyncAdapter.SubmitTask(ctx, *ch, r.URL.Path, bodyBytes)
 	if submitErr != nil || submitResp == nil || submitResp.StatusCode >= http.StatusBadRequest {
 		statusCode := http.StatusBadGateway
@@ -109,9 +119,11 @@ func (h *GatewayHandler) CreateVideoGenerationTask(w http.ResponseWriter, r *htt
 	upstreamTaskID := submitResp.TaskID
 	taskStatus := submitResp.Status
 	metadataBytes := mustMarshalJSON(map[string]any{
-		"upstream_status": taskStatus,
-		"refresh_path":    "/v1/tasks/" + upstreamTaskID,
-		"cancel_path":     "/v1/tasks/" + upstreamTaskID + "/cancel",
+		"public_model_name":   req.Model,
+		"upstream_model_name": upstreamModelName,
+		"upstream_status":     taskStatus,
+		"refresh_path":        "/v1/tasks/" + upstreamTaskID,
+		"cancel_path":         "/v1/tasks/" + upstreamTaskID + "/cancel",
 	})
 
 	task, err = h.queries.MarkAsyncTaskSubmitted(ctx, db.MarkAsyncTaskSubmittedParams{
@@ -196,7 +208,12 @@ func (h *GatewayHandler) CancelTask(w http.ResponseWriter, r *http.Request) {
 	if task.ChannelID.Valid && task.UpstreamTaskID.Valid {
 		ch, channelErr := h.queries.GetChannelByID(ctx, task.ChannelID.Int32)
 		if channelErr == nil {
-			asyncAdapter := adapter.GetAsyncTaskAdapter(ch.Provider)
+			driver := provider.GetProvider(ch.Provider)
+			asyncAdapter := driver.Async()
+			if asyncAdapter == nil {
+				utils.WriteOpenAIError(w, http.StatusBadGateway, "Provider does not support async tasks", "server_error", "async_provider_unsupported")
+				return
+			}
 			cancelResp, cancelErr := asyncAdapter.CancelTask(ctx, ch, task.UpstreamTaskID.String)
 			if cancelErr != nil || cancelResp == nil || cancelResp.StatusCode >= http.StatusBadRequest {
 				utils.WriteOpenAIError(w, http.StatusBadGateway, "Upstream task cancellation failed", "server_error", "upstream_cancel_failed")
@@ -235,7 +252,11 @@ func (h *GatewayHandler) refreshTaskStatus(ctx context.Context, task db.AsyncTas
 		return task, err
 	}
 
-	asyncAdapter := adapter.GetAsyncTaskAdapter(ch.Provider)
+	driver := provider.GetProvider(ch.Provider)
+	asyncAdapter := driver.Async()
+	if asyncAdapter == nil {
+		return task, fmt.Errorf("provider %s does not support async tasks", ch.Provider)
+	}
 	statusResp, reqErr := asyncAdapter.GetTask(ctx, ch, task.UpstreamTaskID.String)
 	if reqErr != nil || statusResp == nil || statusResp.StatusCode >= http.StatusBadRequest {
 		return task, reqErr

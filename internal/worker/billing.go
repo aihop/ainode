@@ -105,6 +105,17 @@ func (processor *BillingTaskProcessor) HandleRecordBillingLog(ctx context.Contex
 		return err // 返回 error 触发 asynq 自动重试
 	}
 
+	// 4. 递增 API Key 配额使用量
+	if req.ApiKeyID > 0 {
+		if err := processor.queries.IncrementAPIKeyQuotaUsed(ctx, db.IncrementAPIKeyQuotaUsedParams{
+			ID:        req.ApiKeyID,
+			QuotaUsed: pgtype.Int8{Int64: req.ActualCostCents, Valid: true},
+		}); err != nil {
+			log.Printf("Worker ERROR: Failed to increment API Key quota for key %d: %v", req.ApiKeyID, err)
+			// 不触发重试——账单已写入，配额递增失败不影响计费准确性，下次请求会重新检查 DB
+		}
+	}
+
 	log.Printf("Worker SUCCESS: DB synchronized for Request %s", req.RequestID)
 	return nil
 }

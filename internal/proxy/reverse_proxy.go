@@ -14,14 +14,18 @@ import (
 	"strings"
 	"time"
 
-	"aihop.io/ainode/internal/adapter"
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/channel"
 	"aihop.io/ainode/internal/config"
 	"aihop.io/ainode/internal/db"
 	"aihop.io/ainode/internal/metrics"
+	"aihop.io/ainode/internal/provider"
 	"aihop.io/ainode/internal/utils"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const maxFailureResponseBodyLength = 4096
 
 // FallbackTransport 实现 http.RoundTripper 接口，用于在遇到上游限流或错误时进行重试
 type FallbackTransport struct {
@@ -30,10 +34,156 @@ type FallbackTransport struct {
 	DBQueries         *db.Queries
 }
 
+func truncateString(value string, maxLen int) string {
+	if len(value) <= maxLen {
+		return value
+	}
+	return value[:maxLen]
+}
+
+func classifyModelFailure(statusCode int, translated *provider.ProviderError) (string, string, bool) {
+	if translated != nil {
+		isRetryable := statusCode == http.StatusTooManyRequests || statusCode >= 500
+		if translated.Code == "bad_gateway" {
+			isRetryable = true
+		}
+		return translated.Type, translated.Code, isRetryable
+	}
+
+	switch {
+	case statusCode == http.StatusTooManyRequests:
+		return "rate_limit_error", "rate_limit", true
+	case statusCode == http.StatusBadGateway:
+		return "server_error", "bad_gateway", true
+	case statusCode == http.StatusServiceUnavailable:
+		return "server_error", "service_unavailable", true
+	case statusCode == http.StatusGatewayTimeout:
+		return "server_error", "gateway_timeout", true
+	case statusCode >= 500:
+		return "server_error", "upstream_server_error", true
+	case statusCode == http.StatusUnauthorized:
+		return "authentication_error", "unauthorized", false
+	case statusCode == http.StatusForbidden:
+		return "permission_error", "forbidden", false
+	case statusCode == http.StatusPaymentRequired:
+		return "billing_error", "insufficient_quota", false
+	case statusCode >= 400:
+		return "invalid_request_error", "request_failed", false
+	default:
+		return "server_error", "request_failed", false
+	}
+}
+
+func logModelFailure(ctx context.Context, queries *db.Queries, statusCode int, responseBody string, translated *provider.ProviderError, fallbackMessage string) {
+	if queries == nil {
+		return
+	}
+
+	userID, ok := ctx.Value("user_id").(int32)
+	if !ok || userID <= 0 {
+		return
+	}
+
+	modelName, _ := ctx.Value("public_model_name").(string)
+	if modelName == "" {
+		modelName, _ = ctx.Value("model_name").(string)
+	}
+	if modelName == "" {
+		return
+	}
+
+	requestID, _ := ctx.Value("request_id").(string)
+	providerName, _ := ctx.Value("current_provider").(string)
+	apiKeyID, _ := ctx.Value("api_key_id").(int32)
+
+	latencyMs := int32(0)
+	if startedAt, ok := ctx.Value("request_start_time").(time.Time); ok {
+		latencyMs = int32(time.Since(startedAt).Milliseconds())
+	}
+
+	errorType, errorCode, isRetryable := classifyModelFailure(statusCode, translated)
+	errorMessage := fallbackMessage
+	if translated != nil && translated.Message != "" {
+		errorMessage = translated.Message
+	}
+	if errorMessage == "" {
+		errorMessage = http.StatusText(statusCode)
+	}
+
+	params := db.CreateModelFailureLogParams{
+		UserID:       userID,
+		ApiKeyID:     pgtype.Int4{Int32: apiKeyID, Valid: apiKeyID > 0},
+		RequestID:    truncateString(requestID, 100),
+		ModelName:    truncateString(modelName, 100),
+		Provider:     truncateString(providerName, 32),
+		ErrorType:    truncateString(errorType, 50),
+		ErrorCode:    truncateString(errorCode, 50),
+		StatusCode:   int32(statusCode),
+		ErrorMessage: truncateString(errorMessage, 4000),
+		ResponseBody: truncateString(responseBody, maxFailureResponseBodyLength),
+		LatencyMs:    latencyMs,
+		IsRetryable:  isRetryable,
+	}
+
+	_ = queries.CreateModelFailureLog(context.Background(), params)
+}
+
+func (t *FallbackTransport) logChannelFailure(req *http.Request, ch *db.Channel, resp *http.Response, roundTripErr error, responseBody string) {
+	if t.DBQueries == nil || ch == nil {
+		return
+	}
+
+	ctx := context.Background()
+	requestID, _ := req.Context().Value("request_id").(string)
+	modelName, _ := req.Context().Value("public_model_name").(string)
+	if modelName == "" {
+		modelName, _ = req.Context().Value("model_name").(string)
+	}
+
+	latencyMs := int32(0)
+	if startedAt, ok := req.Context().Value("request_start_time").(time.Time); ok {
+		latencyMs = int32(time.Since(startedAt).Milliseconds())
+	}
+
+	statusCode := int32(0)
+	errorType := "transport_error"
+	errorMessage := ""
+	if roundTripErr != nil {
+		errorMessage = roundTripErr.Error()
+	} else if resp != nil {
+		statusCode = int32(resp.StatusCode)
+		switch {
+		case resp.StatusCode == http.StatusTooManyRequests:
+			errorType = "rate_limit"
+		case resp.StatusCode >= 500:
+			errorType = "upstream_server_error"
+		default:
+			errorType = "upstream_error"
+		}
+		errorMessage = http.StatusText(resp.StatusCode)
+	}
+
+	snapshot := channel.GlobalManager.GetChannelHealthSnapshot(ch.ID)
+	_ = t.DBQueries.CreateChannelFailureLog(ctx, db.CreateChannelFailureLogParams{
+		ChannelID:       ch.ID,
+		RequestID:       truncateString(requestID, 100),
+		ModelName:       truncateString(modelName, 100),
+		Provider:        truncateString(ch.Provider, 32),
+		UpstreamBaseUrl: truncateString(ch.BaseUrl, 255),
+		ErrorType:       truncateString(errorType, 50),
+		StatusCode:      statusCode,
+		ResponseBody:    truncateString(responseBody, maxFailureResponseBodyLength),
+		ErrorMessage:    truncateString(errorMessage, 4000),
+		LatencyMs:       latencyMs,
+		CircuitState:    snapshot.CircuitState,
+	})
+}
+
 func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var resp *http.Response
 	var err error
 	var reqBodyBytes []byte
+	attemptedChannels := make(map[int32]struct{})
 
 	// 缓存请求体以便重试时可以重复发送
 	if req.Body != nil {
@@ -47,29 +197,53 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 			req.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
 		}
 
-		// 判断是否是计费路由
+		// 判断是否是计费路由，以及具体的请求类型
 		isBillingRoute, _ := req.Context().Value("is_billing_route").(bool)
+		requestType, _ := req.Context().Value("request_type").(string)
 
-		var modelName string
+		var publicModelName string
 		if isBillingRoute {
 			// 获取请求中指定的模型
-			modelName, _ = req.Context().Value("model_name").(string)
+			publicModelName, _ = req.Context().Value("public_model_name").(string)
+			if publicModelName == "" {
+				publicModelName, _ = req.Context().Value("model_name").(string)
+			}
 		} else {
 			// 非计费路由 (如 /v1/models)，不需要模型精确路由，传空字符串
-			modelName = ""
+			publicModelName = ""
 		}
 
-		// 获取下一个支持该模型的可用渠道
-		ch, errChan := channel.GlobalManager.GetNextChannel(modelName)
-		if errChan != nil {
-			return nil, fmt.Errorf("no available channels for model %s: %w", modelName, errChan)
+		// 根据请求类型确定所需的渠道能力
+		requiredCaps := provider.ProviderCapabilities{}
+		if requestType == "image_generation" {
+			requiredCaps.Image = true
+		} else if requestType == "video_generation" {
+			requiredCaps.Video = true
+			requiredCaps.AsyncTask = true
 		}
+
+		// 获取下一个支持该模型的可用渠道，并跳过本次请求已经失败过的渠道
+		var ch *db.Channel
+		var errChan error
+		if requiredCaps.Image || requiredCaps.Video {
+			ch, errChan = channel.GlobalManager.GetNextChannelForCapabilities(publicModelName, requiredCaps)
+		} else {
+			ch, errChan = channel.GlobalManager.GetNextChannelExcluding(publicModelName, attemptedChannels)
+		}
+		if errChan != nil {
+			return nil, fmt.Errorf("no available channels for model %s: %w", publicModelName, errChan)
+		}
+
+		upstreamModelName := provider.ResolveUpstreamModelName(*ch, publicModelName)
 
 		// 执行 Adapter 请求体与路由转换 (只有计费路由才需要复杂的转换)
 		if isBillingRoute {
-			if strings.HasSuffix(req.URL.Path, "/chat/completions") || strings.HasSuffix(req.URL.Path, "/completions") {
-				provAdapter := adapter.GetAdapter(ch.Provider)
-				if rewriteErr := provAdapter.RewriteRequest(req, modelName); rewriteErr != nil {
+			isChatRoute := strings.HasSuffix(req.URL.Path, "/chat/completions") || strings.HasSuffix(req.URL.Path, "/completions")
+			isImageRoute := strings.HasSuffix(req.URL.Path, "/images/generations") || strings.HasSuffix(req.URL.Path, "/image/generations")
+			if isChatRoute || isImageRoute {
+				driver := provider.GetProvider(ch.Provider)
+				provAdapter := driver.Request()
+				if rewriteErr := provAdapter.RewriteRequest(req, upstreamModelName); rewriteErr != nil {
 					return nil, fmt.Errorf("failed to rewrite request via adapter: %w", rewriteErr)
 				}
 			}
@@ -94,11 +268,17 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 			req.URL.Path = strings.TrimSuffix(upstreamURL.Path, "/") + originalPath
 		}
 
-		req.Header.Set("Authorization", "Bearer "+ch.ApiKey)
+		driver := provider.GetProvider(ch.Provider)
+		if authStrategy := driver.Auth(); authStrategy != nil {
+			if authErr := authStrategy.Apply(req, ch.ApiKey); authErr != nil {
+				return nil, fmt.Errorf("failed to apply provider auth: %w", authErr)
+			}
+		}
 
 		// 将当前选中的 channel ID 和 Provider 注入到请求的 Context 中
 		ctx := context.WithValue(req.Context(), "current_channel_id", ch.ID)
 		ctx = context.WithValue(ctx, "current_provider", ch.Provider)
+		ctx = context.WithValue(ctx, "upstream_model_name", upstreamModelName)
 		req = req.WithContext(ctx)
 
 		// 发起实际请求
@@ -108,16 +288,23 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		if err != nil || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			log.Printf("Attempt %d: Upstream request to %s failed. Error: %v, Status: %d", i+1, req.URL.String(), err, getStatus(resp))
 
-			// 如果有响应，必须关闭原先的 Body 防止泄露
+			responseBody := ""
 			if resp != nil && resp.Body != nil {
+				rawBody, readErr := io.ReadAll(io.LimitReader(resp.Body, maxFailureResponseBodyLength))
+				if readErr == nil {
+					responseBody = string(rawBody)
+				}
 				resp.Body.Close()
 			}
 
-			// 可以选择标记该渠道为故障
-			// channel.GlobalManager.MarkChannelFailed(ch.ID)
+			attemptedChannels[ch.ID] = struct{}{}
+			channel.GlobalManager.MarkChannelFailed(ch.ID)
+			t.logChannelFailure(req, ch, resp, err, responseBody)
 
 			continue // 继续下一次重试
 		}
+
+		channel.GlobalManager.MarkChannelSucceeded(ch.ID)
 
 		// 成功则直接返回
 		break
@@ -164,8 +351,13 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 
 		// 从上下文中提取必要的信息用于结算 (这些通常在进入 Proxy 前的中间件中解析并塞入)
 		userID, _ := ctx.Value("user_id").(int32)
+		apiKeyID, _ := ctx.Value("api_key_id").(int32)
 		channelID, _ := ctx.Value("current_channel_id").(int32)
-		modelName, _ := ctx.Value("model_name").(string)
+		publicModelName, _ := ctx.Value("public_model_name").(string)
+		if publicModelName == "" {
+			publicModelName, _ = ctx.Value("model_name").(string)
+		}
+		upstreamModelName, _ := ctx.Value("upstream_model_name").(string)
 		reqID, _ := ctx.Value("request_id").(string)
 		preDeductedCents, _ := ctx.Value("pre_deducted_cents").(int64)
 		grantDeducted, _ := ctx.Value("grant_deducted").(int64)
@@ -175,13 +367,36 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 		billingUnits, _ := ctx.Value("billing_units").(int64)
 
 		if resp.StatusCode != http.StatusOK {
+			rawBody, readErr := io.ReadAll(resp.Body)
+			if readErr == nil {
+				resp.Body.Close()
+				providerName, _ := ctx.Value("current_provider").(string)
+				driver := provider.GetProvider(providerName)
+				var translated *provider.ProviderError
+				if driver != nil && driver.Errors() != nil {
+					translated = driver.Errors().Translate(resp.StatusCode, rawBody)
+				}
+				if translated != nil {
+					resp.Header.Set("Content-Type", "application/json; charset=utf-8")
+					resp.StatusCode = translated.StatusCode
+					resp.Status = fmt.Sprintf("%d %s", translated.StatusCode, http.StatusText(translated.StatusCode))
+					translatedBody := []byte(fmt.Sprintf(`{"error":{"message":%q,"type":%q,"code":%q}}`, translated.Message, translated.Type, translated.Code))
+					resp.Body = io.NopCloser(bytes.NewBuffer(translatedBody))
+					resp.ContentLength = int64(len(translatedBody))
+					resp.Header.Set("Content-Length", strconv.Itoa(len(translatedBody)))
+					logModelFailure(ctx, queries, translated.StatusCode, string(translatedBody), translated, translated.Message)
+				} else {
+					resp.Body = io.NopCloser(bytes.NewBuffer(rawBody))
+					logModelFailure(ctx, queries, resp.StatusCode, string(rawBody), nil, http.StatusText(resp.StatusCode))
+				}
+			}
 			// 如果最终还是失败，应该在这里触发全额退还预扣费的回调
 			if preDeductedCents > 0 {
 				log.Printf("Upstream error %d from channel %d, refunding...", resp.StatusCode, channelID)
 				billing.Refund(context.Background(), queries, userID, preDeductedCents, grantDeducted, cashDeducted, reqID)
 			}
 			// 监控埋点：记录失败请求
-			metrics.GatewayRequestTotal.WithLabelValues(modelName, strconv.Itoa(int(channelID)), strconv.Itoa(resp.StatusCode)).Inc()
+			metrics.GatewayRequestTotal.WithLabelValues(publicModelName, strconv.Itoa(int(channelID)), strconv.Itoa(resp.StatusCode)).Inc()
 			return nil
 		}
 
@@ -196,7 +411,7 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 		multiplier := float32(1)
 		pricingMode := "token"
 		requestPrice := int64(0)
-		if modelInfo, err := config.GlobalModelManager.GetModel(context.Background(), queries, modelName); err == nil {
+		if modelInfo, err := config.GlobalModelManager.GetModel(context.Background(), queries, publicModelName); err == nil {
 			inputPrice = modelInfo.InputPriceCents
 			outputPrice = modelInfo.OutputPriceCents
 			cacheHitPrice = modelInfo.CacheHitPriceCents
@@ -210,13 +425,13 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			// 监控埋点：记录成功请求、耗时及 Token 消耗
 			if startTimeObj, ok := ctx.Value("request_start_time").(time.Time); ok {
 				duration := time.Since(startTimeObj).Seconds()
-				metrics.GatewayRequestDuration.WithLabelValues(modelName, strconv.Itoa(int(channelID))).Observe(duration)
+				metrics.GatewayRequestDuration.WithLabelValues(publicModelName, strconv.Itoa(int(channelID))).Observe(duration)
 			}
-			metrics.GatewayRequestTotal.WithLabelValues(modelName, strconv.Itoa(int(channelID)), "200").Inc()
-			metrics.GatewayTokensTotal.WithLabelValues(modelName, strconv.Itoa(int(channelID)), "prompt").Add(float64(pTokens))
-			metrics.GatewayTokensTotal.WithLabelValues(modelName, strconv.Itoa(int(channelID)), "completion").Add(float64(cTokens))
-			metrics.GatewayTokensTotal.WithLabelValues(modelName, strconv.Itoa(int(channelID)), "cache_hit").Add(float64(cacheHitTokens))
-			metrics.GatewayTokensTotal.WithLabelValues(modelName, strconv.Itoa(int(channelID)), "cache_miss").Add(float64(cacheMissTokens))
+			metrics.GatewayRequestTotal.WithLabelValues(publicModelName, strconv.Itoa(int(channelID)), "200").Inc()
+			metrics.GatewayTokensTotal.WithLabelValues(publicModelName, strconv.Itoa(int(channelID)), "prompt").Add(float64(pTokens))
+			metrics.GatewayTokensTotal.WithLabelValues(publicModelName, strconv.Itoa(int(channelID)), "completion").Add(float64(cTokens))
+			metrics.GatewayTokensTotal.WithLabelValues(publicModelName, strconv.Itoa(int(channelID)), "cache_hit").Add(float64(cacheHitTokens))
+			metrics.GatewayTokensTotal.WithLabelValues(publicModelName, strconv.Itoa(int(channelID)), "cache_miss").Add(float64(cacheMissTokens))
 
 			// 如果没有解析到缓存 token，默认将所有 prompt_tokens 视为未命中
 			if cacheHitTokens == 0 && cacheMissTokens == 0 {
@@ -246,8 +461,9 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 
 			settleReq := billing.SettlementRequest{
 				UserID:           userID,
+				ApiKeyID:         apiKeyID,
 				ChannelID:        channelID,
-				ModelName:        modelName,
+				ModelName:        publicModelName,
 				PromptTokens:     int32(pTokens),
 				CompletionTokens: int32(cTokens),
 				CacheHitTokens:   int32(cacheHitTokens),
@@ -267,7 +483,11 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			// 从上下文获取 provider
 			provider, _ := ctx.Value("current_provider").(string)
 			// 挂载 TallyReader 拦截器
-			resp.Body = NewTallyReader(resp.Body, modelName, promptTokens, provider, onComplete)
+			tokenizerModelName := upstreamModelName
+			if tokenizerModelName == "" {
+				tokenizerModelName = publicModelName
+			}
+			resp.Body = NewTallyReader(resp.Body, tokenizerModelName, promptTokens, provider, onComplete)
 		} else {
 			// 非流式响应处理：读取所有 Body 并解析 usage
 			bodyBytes, err := io.ReadAll(resp.Body)
@@ -313,7 +533,6 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				onComplete(pTokens, cTokens, chTokens, cmTokens)
 			}
 		}
-
 		return nil
 	}
 
@@ -346,7 +565,10 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			}
 
 			// 记录网关层面的错误 (502 Bad Gateway)
-			modelName, _ := ctx.Value("model_name").(string)
+			modelName, _ := ctx.Value("public_model_name").(string)
+			if modelName == "" {
+				modelName, _ = ctx.Value("model_name").(string)
+			}
 			channelID, _ := ctx.Value("current_channel_id").(int32)
 			if modelName != "" {
 				metrics.GatewayRequestTotal.WithLabelValues(modelName, strconv.Itoa(int(channelID)), "502").Inc()
@@ -357,6 +579,7 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			if err != nil {
 				errMsg = fmt.Sprintf("Bad Gateway: %v", err)
 			}
+			logModelFailure(ctx, queries, http.StatusBadGateway, "", nil, errMsg)
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusBadGateway)
 			fmt.Fprintf(w, `{"error":{"message":%q,"type":"server_error","code":"bad_gateway"}}`, errMsg)

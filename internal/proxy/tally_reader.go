@@ -8,7 +8,7 @@ import (
 	"log"
 	"strings"
 
-	"aihop.io/ainode/internal/adapter"
+	"aihop.io/ainode/internal/provider"
 	"github.com/pkoukk/tiktoken-go"
 )
 
@@ -62,7 +62,8 @@ func (t *TallyReader) Read(p []byte) (n int, err error) {
 }
 
 func (t *TallyReader) processChunk(chunk []byte) {
-	provAdapter := adapter.GetAdapter(t.Provider)
+	driver := provider.GetProvider(t.Provider)
+	provAdapter := driver.Request()
 	lines := bytes.Split(chunk, []byte("\n"))
 
 	for _, line := range lines {
