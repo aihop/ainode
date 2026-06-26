@@ -8,3 +8,6 @@ redis:
   addr: "redis:6379"
   password: "pwNYkzxhKnwAxGZz"
   db: 0
+
+internal:
+  token: ""

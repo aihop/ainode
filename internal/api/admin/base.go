@@ -4,18 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/db"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type AdminHandler struct {
 	queries *db.Queries
+	pool    *pgxpool.Pool
 }
 
-func NewAdminHandler(queries *db.Queries) *AdminHandler {
-	return &AdminHandler{queries: queries}
+func NewAdminHandler(queries *db.Queries, pool *pgxpool.Pool) *AdminHandler {
+	return &AdminHandler{
+		queries: queries,
+		pool:    pool,
+	}
 }
 
 // 辅助方法：通知网关节点热更新配置
@@ -30,7 +37,7 @@ func rawJSONOrDefault(raw json.RawMessage) []byte {
 	return raw
 }
 
-func jsonResponse(w http.ResponseWriter, status int, data interface{}) {
+func jsonResponse(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)
@@ -54,4 +61,20 @@ func formatTime(value any) string {
 		return v.UTC().Format(time.RFC3339)
 	}
 	return ""
+}
+
+func readAdminOperator(r *http.Request) (int32, string) {
+	var adminID int32
+	if raw := strings.TrimSpace(r.Header.Get("X-Internal-Admin-Id")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			adminID = int32(parsed)
+		}
+	}
+
+	adminName := strings.TrimSpace(r.Header.Get("X-Internal-Admin-Username"))
+	if adminName == "" && adminID > 0 {
+		adminName = "admin#" + strconv.FormatInt(int64(adminID), 10)
+	}
+
+	return adminID, adminName
 }

@@ -33,6 +33,15 @@ LIMIT 1;
 -- name: GetUserByID :one
 SELECT * FROM users WHERE id = $1 LIMIT 1;
 
+-- name: GetUserByIDForUpdate :one
+SELECT * FROM users WHERE id = $1 FOR UPDATE;
+
+-- name: GetTransactionByEventID :one
+SELECT *
+FROM transactions
+WHERE event_id = $1
+LIMIT 1;
+
 -- name: UpdateUserTopupBalance :exec
 UPDATE users
 SET
@@ -421,6 +430,81 @@ WHERE
         OR u.email ILIKE '%' || sqlc.arg(keyword)::text || '%'
         OR COALESCE(u.nickname, '') ILIKE '%' || sqlc.arg(keyword)::text || '%'
     );
+
+-- name: CreateTransaction :one
+INSERT INTO transactions (
+    user_id,
+    event_id,
+    type,
+    balance_type,
+    direction,
+    amount_cents,
+    before_balance_cents,
+    after_balance_cents,
+    source_type,
+    source_id,
+    status,
+    remark,
+    metadata
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+) RETURNING
+    id,
+    user_id,
+    event_id,
+    type,
+    balance_type,
+    direction,
+    amount_cents,
+    before_balance_cents,
+    after_balance_cents,
+    source_type,
+    source_id,
+    status,
+    remark,
+    metadata,
+    created_at;
+
+-- name: CreateBalanceLog :exec
+INSERT INTO balance_logs (
+    transaction_id,
+    user_id,
+    balance_type,
+    action_type,
+    amount_cents,
+    before_balance_cents,
+    after_balance_cents,
+    operator_admin_id,
+    operator_name,
+    remark
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+);
+
+-- name: ListBalanceLogsByUser :many
+SELECT
+    id,
+    transaction_id,
+    user_id,
+    balance_type,
+    action_type,
+    amount_cents,
+    before_balance_cents,
+    after_balance_cents,
+    operator_admin_id,
+    operator_name,
+    remark,
+    created_at
+FROM balance_logs
+WHERE user_id = sqlc.arg(user_id)
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(limit_val)
+OFFSET sqlc.arg(offset_val);
+
+-- name: CountBalanceLogsByUser :one
+SELECT COUNT(*)
+FROM balance_logs
+WHERE user_id = $1;
 
 -- name: GetUsersSummaryForAdmin :one
 WITH filtered_users AS (

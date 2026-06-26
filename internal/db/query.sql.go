@@ -38,6 +38,19 @@ func (q *Queries) CountActiveUserAPIKeys(ctx context.Context, userID pgtype.Int4
 	return count, err
 }
 
+const countBalanceLogsByUser = `-- name: CountBalanceLogsByUser :one
+SELECT COUNT(*)
+FROM balance_logs
+WHERE user_id = $1
+`
+
+func (q *Queries) CountBalanceLogsByUser(ctx context.Context, userID int32) (int64, error) {
+	row := q.db.QueryRow(ctx, countBalanceLogsByUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countBillingLogs = `-- name: CountBillingLogs :one
 SELECT COUNT(*) FROM billing_logs
 `
@@ -252,6 +265,52 @@ func (q *Queries) CreateAsyncTask(ctx context.Context, arg CreateAsyncTaskParams
 		&i.CanceledAt,
 	)
 	return i, err
+}
+
+const createBalanceLog = `-- name: CreateBalanceLog :exec
+INSERT INTO balance_logs (
+    transaction_id,
+    user_id,
+    balance_type,
+    action_type,
+    amount_cents,
+    before_balance_cents,
+    after_balance_cents,
+    operator_admin_id,
+    operator_name,
+    remark
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+)
+`
+
+type CreateBalanceLogParams struct {
+	TransactionID      pgtype.Int8
+	UserID             int32
+	BalanceType        string
+	ActionType         string
+	AmountCents        int64
+	BeforeBalanceCents int64
+	AfterBalanceCents  int64
+	OperatorAdminID    pgtype.Int4
+	OperatorName       string
+	Remark             string
+}
+
+func (q *Queries) CreateBalanceLog(ctx context.Context, arg CreateBalanceLogParams) error {
+	_, err := q.db.Exec(ctx, createBalanceLog,
+		arg.TransactionID,
+		arg.UserID,
+		arg.BalanceType,
+		arg.ActionType,
+		arg.AmountCents,
+		arg.BeforeBalanceCents,
+		arg.AfterBalanceCents,
+		arg.OperatorAdminID,
+		arg.OperatorName,
+		arg.Remark,
+	)
+	return err
 }
 
 const createBillingLog = `-- name: CreateBillingLog :one
@@ -474,6 +533,94 @@ func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (Model
 	return i, err
 }
 
+const createTransaction = `-- name: CreateTransaction :one
+INSERT INTO transactions (
+    user_id,
+    event_id,
+    type,
+    balance_type,
+    direction,
+    amount_cents,
+    before_balance_cents,
+    after_balance_cents,
+    source_type,
+    source_id,
+    status,
+    remark,
+    metadata
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+) RETURNING
+    id,
+    user_id,
+    event_id,
+    type,
+    balance_type,
+    direction,
+    amount_cents,
+    before_balance_cents,
+    after_balance_cents,
+    source_type,
+    source_id,
+    status,
+    remark,
+    metadata,
+    created_at
+`
+
+type CreateTransactionParams struct {
+	UserID             int32
+	EventID            pgtype.Text
+	Type               string
+	BalanceType        string
+	Direction          string
+	AmountCents        int64
+	BeforeBalanceCents int64
+	AfterBalanceCents  int64
+	SourceType         string
+	SourceID           string
+	Status             string
+	Remark             string
+	Metadata           []byte
+}
+
+func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error) {
+	row := q.db.QueryRow(ctx, createTransaction,
+		arg.UserID,
+		arg.EventID,
+		arg.Type,
+		arg.BalanceType,
+		arg.Direction,
+		arg.AmountCents,
+		arg.BeforeBalanceCents,
+		arg.AfterBalanceCents,
+		arg.SourceType,
+		arg.SourceID,
+		arg.Status,
+		arg.Remark,
+		arg.Metadata,
+	)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.EventID,
+		&i.Type,
+		&i.BalanceType,
+		&i.Direction,
+		&i.AmountCents,
+		&i.BeforeBalanceCents,
+		&i.AfterBalanceCents,
+		&i.SourceType,
+		&i.SourceID,
+		&i.Status,
+		&i.Remark,
+		&i.Metadata,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const deleteAPIKey = `-- name: DeleteAPIKey :exec
 DELETE FROM api_keys WHERE id = $1 AND user_id = $2
 `
@@ -613,6 +760,36 @@ func (q *Queries) GetModelByName(ctx context.Context, modelName string) (Model, 
 		&i.PricingConfig,
 		&i.MaxConcurrency,
 		&i.Status,
+	)
+	return i, err
+}
+
+const getTransactionByEventID = `-- name: GetTransactionByEventID :one
+SELECT id, user_id, event_id, type, balance_type, direction, amount_cents, before_balance_cents, after_balance_cents, source_type, source_id, status, remark, metadata, created_at
+FROM transactions
+WHERE event_id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetTransactionByEventID(ctx context.Context, eventID pgtype.Text) (Transaction, error) {
+	row := q.db.QueryRow(ctx, getTransactionByEventID, eventID)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.EventID,
+		&i.Type,
+		&i.BalanceType,
+		&i.Direction,
+		&i.AmountCents,
+		&i.BeforeBalanceCents,
+		&i.AfterBalanceCents,
+		&i.SourceType,
+		&i.SourceID,
+		&i.Status,
+		&i.Remark,
+		&i.Metadata,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -841,6 +1018,30 @@ SELECT id, email, password_hash, nickname, avatar_url, cash_balance, grant_balan
 
 func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Nickname,
+		&i.AvatarUrl,
+		&i.CashBalance,
+		&i.GrantBalance,
+		&i.TierLevel,
+		&i.GrantExpiresAt,
+		&i.Status,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUserByIDForUpdate = `-- name: GetUserByIDForUpdate :one
+SELECT id, email, password_hash, nickname, avatar_url, cash_balance, grant_balance, tier_level, grant_expires_at, status, last_login_at, created_at FROM users WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id int32) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByIDForUpdate, id)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -1228,6 +1429,66 @@ func (q *Queries) ListAllModelsForAdmin(ctx context.Context) ([]Model, error) {
 			&i.PricingConfig,
 			&i.MaxConcurrency,
 			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBalanceLogsByUser = `-- name: ListBalanceLogsByUser :many
+SELECT
+    id,
+    transaction_id,
+    user_id,
+    balance_type,
+    action_type,
+    amount_cents,
+    before_balance_cents,
+    after_balance_cents,
+    operator_admin_id,
+    operator_name,
+    remark,
+    created_at
+FROM balance_logs
+WHERE user_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT $3
+OFFSET $2
+`
+
+type ListBalanceLogsByUserParams struct {
+	UserID    int32
+	OffsetVal int32
+	LimitVal  int32
+}
+
+func (q *Queries) ListBalanceLogsByUser(ctx context.Context, arg ListBalanceLogsByUserParams) ([]BalanceLog, error) {
+	rows, err := q.db.Query(ctx, listBalanceLogsByUser, arg.UserID, arg.OffsetVal, arg.LimitVal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BalanceLog
+	for rows.Next() {
+		var i BalanceLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.TransactionID,
+			&i.UserID,
+			&i.BalanceType,
+			&i.ActionType,
+			&i.AmountCents,
+			&i.BeforeBalanceCents,
+			&i.AfterBalanceCents,
+			&i.OperatorAdminID,
+			&i.OperatorName,
+			&i.Remark,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

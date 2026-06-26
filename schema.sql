@@ -190,6 +190,41 @@ CREATE TABLE IF NOT EXISTS billing_logs_2026_12 PARTITION OF billing_logs FOR
 VALUES
 FROM ('2026-12-01') TO ('2027-01-01');
 
+-- 统一资金流水总账（先承接后台余额调整，后续扩展到支付/退款/扣费）
+CREATE TABLE IF NOT EXISTS transactions (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users (id),
+    event_id VARCHAR(120),
+    type VARCHAR(50) NOT NULL, -- topup | refund | grant_issue | grant_reset | usage_deduct | admin_adjust
+    balance_type VARCHAR(20) NOT NULL, -- cash | grant
+    direction VARCHAR(20) NOT NULL, -- credit | debit
+    amount_cents BIGINT NOT NULL,
+    before_balance_cents BIGINT NOT NULL,
+    after_balance_cents BIGINT NOT NULL,
+    source_type VARCHAR(50) NOT NULL DEFAULT 'admin', -- order | subscription | billing | admin | system
+    source_id VARCHAR(100) NOT NULL DEFAULT '',
+    status VARCHAR(20) NOT NULL DEFAULT 'completed', -- pending | completed | failed
+    remark TEXT NOT NULL DEFAULT '',
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+-- 余额变更流水（后台直充/赠送等）
+CREATE TABLE IF NOT EXISTS balance_logs (
+    id BIGSERIAL PRIMARY KEY,
+    transaction_id BIGINT REFERENCES transactions (id),
+    user_id INT NOT NULL REFERENCES users (id),
+    balance_type VARCHAR(20) NOT NULL, -- cash | grant
+    action_type VARCHAR(50) NOT NULL DEFAULT 'admin_recharge',
+    amount_cents BIGINT NOT NULL, -- 本次变更金额，放大 10^8 倍
+    before_balance_cents BIGINT NOT NULL,
+    after_balance_cents BIGINT NOT NULL,
+    operator_admin_id INT,
+    operator_name VARCHAR(100) NOT NULL DEFAULT '',
+    remark TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
 -- 添加索引
 CREATE INDEX IF NOT EXISTS idx_api_keys_key_string ON api_keys (key_string);
 
@@ -200,3 +235,14 @@ CREATE INDEX IF NOT EXISTS idx_billing_user_id ON billing_logs (user_id);
 CREATE INDEX IF NOT EXISTS idx_async_tasks_user_created_at ON async_tasks (user_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_async_tasks_status_created_at ON async_tasks (status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_user_created_at ON transactions (user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_type_created_at ON transactions (type, created_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_event_id_unique ON transactions (event_id)
+WHERE event_id IS NOT NULL AND event_id <> '';
+
+CREATE INDEX IF NOT EXISTS idx_balance_logs_user_created_at ON balance_logs (user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_balance_logs_operator_created_at ON balance_logs (operator_admin_id, created_at DESC);

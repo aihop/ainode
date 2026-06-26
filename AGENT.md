@@ -1,6 +1,9 @@
 # AI Node: 高性能 AI 模型网关与计费系统
 
 > **变更日志 (Changelog)**
+> `2026-06-26`: 新增 `internal/api/webhook/events.go` 通用事件入口，兼容 APayShop 的 HMAC 事件包并映射到内部 `transactions`；`transactions` 增加 `event_id` 幂等键，见 Section 2、Section 3 与 Section 4。
+> `2026-06-26`: 新增 `transactions` 统一资金总账，并让管理员直充同时写入 `transactions + balance_logs`，见 Section 3 与 Section 6。
+> `2026-06-26`: 新增 `balance_logs` 余额流水表与管理员直充审计链路，后台充值改为“写流水 + 同步 Redis 缓存”，见 Section 3 与 Section 6。
 > `2026-06-26`: 新增多模态网关演进约定，统一媒体输入抽象与图生视频异步任务设计边界，见 Section 4.6。
 > `2026-06-26`: 扩展 models/channels 多模态元数据字段，并引入 request 计费模式与图像生成入口约定，见 Section 3 与 Section 4.6。
 > `2026-06-26`: 新增 async_tasks 表与视频异步任务路由骨架，见 Section 3、Section 4.6 与 Section 6。
@@ -64,7 +67,8 @@ AI 请严格按照以下结构组织代码：
 │   │   └── model_concurrency.go # 模型级并发占位与释放
 │   ├── api/                 # HTTP 接口
 │   │   ├── admin/           # 管理员 API (渠道/模型 CRUD、账单查询)
-│   │   └── site/            # 用户 API (仪表盘、统计、Key 管理)
+│   │   ├── site/            # 用户 API (仪表盘、统计、Key 管理)
+│   │   └── webhook/         # 内部交易事件 Webhook (APayShop 入账等)
 │   ├── config/              # 应用级配置
 │   │   ├── config.go        # viper 配置加载
 │   │   ├── model_manager.go # 模型价格内存缓存
@@ -111,6 +115,8 @@ AI 请严格按照以下结构组织代码：
 | `channels` | 上游渠道配置 | `provider`, `base_url`, `api_key`, `models`, `protocol_type`, `upload_mode`, `model_mapping`, `supports_async`, `weight` |
 | `async_tasks` | 异步媒体任务状态与预扣费跟踪 | `request_id`, `task_type`, `provider`, `model_name`, `status`, `upstream_task_id`, `pre_deducted_cents`, `actual_cost_cents` |
 | `billing_logs` | 计费流水 | `user_id`, `model_name`, `amount_cents`, `prompt_tokens`, `completion_tokens` |
+| `transactions` | 统一资金总账 | `user_id`, `event_id`, `type`, `balance_type`, `direction`, `amount_cents`, `before_balance_cents`, `after_balance_cents`, `source_type`, `source_id` |
+| `balance_logs` | 余额变更流水 | `user_id`, `balance_type`, `action_type`, `amount_cents`, `before_balance_cents`, `after_balance_cents`, `operator_name`, `remark` |
 
 ### 双余额体系设计
 
@@ -275,6 +281,9 @@ local billing_policy = ARGV[2] or "both"
 | GET/POST | `/api/admin/models` | 模型列表/创建 |
 | PUT/DELETE | `/api/admin/models/{model_name}` | 模型更新/删除 |
 | GET | `/api/admin/billing_logs` | 计费日志查询 (分页) |
+| GET | `/api/admin/users` | 用户余额/Token/请求量聚合列表 |
+| POST | `/api/admin/users/{id}/balance` | 管理员直充/赠送，并写入 `transactions + balance_logs` |
+| GET | `/api/admin/users/{id}/balance-logs` | 查询指定用户余额流水 |
 
 ### 用户 API (由 APayShop 服务端代理调用)
 
@@ -285,6 +294,12 @@ local billing_policy = ARGV[2] or "both"
 | GET | `/api/site/billing-logs/list` | 用户账单记录 |
 | GET/POST | `/api/site/api-keys/list\|create\|delete\|status\|rotate` | API Key 全生命周期管理 |
 | GET | `/api/site/models/groups` | 推荐模型分组 |
+
+### 内部 Webhook API
+
+| 方法 | 路由 | 说明 |
+|------|------|------|
+| POST | `/internal/webhooks/events` | 通用事件入口；兼容 `Authorization: Bearer <internal.token>` 或 APayShop HMAC 签名，并按 `transactions.event_id` 幂等入账 |
 
 ---
 

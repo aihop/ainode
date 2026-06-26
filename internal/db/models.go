@@ -48,6 +48,21 @@ type AsyncTask struct {
 	CanceledAt       pgtype.Timestamptz
 }
 
+type BalanceLog struct {
+	ID                 int64
+	TransactionID      pgtype.Int8
+	UserID             int32
+	BalanceType        string
+	ActionType         string
+	AmountCents        int64
+	BeforeBalanceCents int64
+	AfterBalanceCents  int64
+	OperatorAdminID    pgtype.Int4
+	OperatorName       string
+	Remark             string
+	CreatedAt          pgtype.Timestamptz
+}
+
 type BillingLog struct {
 	ID               pgtype.UUID
 	UserID           pgtype.Int4
@@ -217,6 +232,24 @@ type Model struct {
 	PricingConfig       []byte
 	MaxConcurrency      int32
 	Status              pgtype.Int4
+}
+
+type Transaction struct {
+	ID                 int64
+	UserID             int32
+	EventID            pgtype.Text
+	Type               string
+	BalanceType        string
+	Direction          string
+	AmountCents        int64
+	BeforeBalanceCents int64
+	AfterBalanceCents  int64
+	SourceType         string
+	SourceID           string
+	Status             string
+	Remark             string
+	Metadata           []byte
+	CreatedAt          pgtype.Timestamptz
 }
 
 type User struct {

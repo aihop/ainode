@@ -40,3 +40,19 @@ func InitRedis(addr, password string, db int) error {
 
 	return nil
 }
+
+// SyncUserBalanceCache rewrites the user's grant/cash balance cache in Redis.
+func SyncUserBalanceCache(ctx context.Context, userID int32, grantBalance, cashBalance int64) error {
+	if RedisClient == nil {
+		return fmt.Errorf("redis client is not initialized")
+	}
+
+	pipe := RedisClient.Pipeline()
+	pipe.Set(ctx, fmt.Sprintf("grant_balance:%d", userID), grantBalance, 0)
+	pipe.Set(ctx, fmt.Sprintf("cash_balance:%d", userID), cashBalance, 0)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("failed to sync balance cache: %w", err)
+	}
+
+	return nil
+}

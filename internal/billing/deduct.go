@@ -77,12 +77,7 @@ func LoadBalanceToCache(ctx context.Context, queries *db.Queries, userID int32) 
 	grantBalance := user.GrantBalance.Int64 // pgtype.Int8 转换为 int64
 	cashBalance := user.CashBalance.Int64
 
-	// 使用 Pipeline 原子性写入两个余额
-	pipe := RedisClient.Pipeline()
-	pipe.Set(ctx, fmt.Sprintf("grant_balance:%d", userID), grantBalance, 0)
-	pipe.Set(ctx, fmt.Sprintf("cash_balance:%d", userID), cashBalance, 0)
-	_, err = pipe.Exec(ctx)
-	if err != nil {
+	if err := SyncUserBalanceCache(ctx, userID, grantBalance, cashBalance); err != nil {
 		return fmt.Errorf("failed to set balance in redis: %w", err)
 	}
 

@@ -21,6 +21,7 @@ import (
 	"aihop.io/ainode/internal/api/admin"
 	"aihop.io/ainode/internal/api/gateway"
 	"aihop.io/ainode/internal/api/site"
+	"aihop.io/ainode/internal/api/webhook"
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/channel"
 	"aihop.io/ainode/internal/config"
@@ -138,7 +139,7 @@ func main() {
 				})
 			})
 
-			adminHandler := admin.NewAdminHandler(queries)
+			adminHandler := admin.NewAdminHandler(queries, pool)
 
 			// Channels
 			adminRouter.Get("/api/admin/channels", adminHandler.ListChannels)
@@ -157,11 +158,13 @@ func main() {
 
 			// Users
 			adminRouter.Get("/api/admin/users", adminHandler.ListUsers)
+			adminRouter.Get("/api/admin/users/{id}/balance-logs", adminHandler.ListUserBalanceLogs)
 			adminRouter.Post("/api/admin/users/{id}/balance", adminHandler.AdjustUserBalance)
 		})
 
 		// Initialize internal handler
 		siteHandler := site.NewInternalHandler(queries)
+		webhookHandler := webhook.NewHandler(queries, pool)
 
 		// Site API 组 (供 APayShop Node.js 服务端调用)
 		r.Group(func(siteRouter chi.Router) {
@@ -176,6 +179,8 @@ func main() {
 			siteRouter.Post("/api/site/api-keys/rotate", siteHandler.RotateAPIKeyHandler)
 			siteRouter.Get("/api/site/models/groups", siteHandler.ListModelGroupsHandler)
 		})
+
+		r.Post("/internal/webhooks/events", webhookHandler.HandleEvent)
 
 		// ==========================
 		// 2. 异步媒体任务路由组
@@ -224,7 +229,7 @@ func main() {
 					})
 				}
 
-				resp := map[string]interface{}{
+				resp := map[string]any{
 					"object": "list",
 					"data":   data,
 				}
