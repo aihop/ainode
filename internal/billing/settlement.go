@@ -78,9 +78,22 @@ func Settle(ctx context.Context, queries *db.Queries, req SettlementRequest) err
 			log.Printf("ERROR: Failed to compensate redis balance for user %d: %v", req.UserID, err)
 		}
 	} else if diff < 0 {
-		// 补扣逻辑：理论上极少发生，此处简单扣除充值余额
-		cashKey := fmt.Sprintf("cash_balance:%d", req.UserID)
-		RedisClient.DecrBy(ctx, cashKey, -diff)
+		// 补扣逻辑：理论上极少发生，优先遵循模型余额策略。
+		billingPolicy := "both"
+		if queries != nil {
+			if modelInfo, err := queries.GetModelByName(ctx, req.ModelName); err == nil && modelInfo.BillingPolicy != "" {
+				billingPolicy = modelInfo.BillingPolicy
+			}
+		}
+
+		switch billingPolicy {
+		case "grant_only":
+			grantKey := fmt.Sprintf("grant_balance:%d", req.UserID)
+			RedisClient.DecrBy(ctx, grantKey, -diff)
+		default:
+			cashKey := fmt.Sprintf("cash_balance:%d", req.UserID)
+			RedisClient.DecrBy(ctx, cashKey, -diff)
+		}
 	}
 
 	// 3. 将流水数据序列化并推送到 asynq 队列

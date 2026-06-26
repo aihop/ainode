@@ -73,6 +73,7 @@ SELECT
     cache_hit_price_cents,
     cache_miss_price_cents,
     multiplier,
+    billing_policy,
     max_concurrency,
     status
 FROM models
@@ -90,6 +91,7 @@ SELECT
     cache_hit_price_cents,
     cache_miss_price_cents,
     multiplier,
+    billing_policy,
     max_concurrency,
     status
 FROM models
@@ -178,10 +180,11 @@ INSERT INTO
         cache_hit_price_cents,
         cache_miss_price_cents,
         multiplier,
+        billing_policy,
         max_concurrency,
         status
     )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING
     id,
     model_name,
     input_price_cents,
@@ -189,6 +192,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING
     cache_hit_price_cents,
     cache_miss_price_cents,
     multiplier,
+    billing_policy,
     max_concurrency,
     status;
 
@@ -200,8 +204,9 @@ SET
     cache_hit_price_cents = $4,
     cache_miss_price_cents = $5,
     multiplier = $6,
-    max_concurrency = $7,
-    status = $8
+    billing_policy = $7,
+    max_concurrency = $8,
+    status = $9
 WHERE
     model_name = $1 RETURNING
     id,
@@ -211,6 +216,7 @@ WHERE
     cache_hit_price_cents,
     cache_miss_price_cents,
     multiplier,
+    billing_policy,
     max_concurrency,
     status;
 
@@ -226,6 +232,7 @@ SELECT
     cache_hit_price_cents,
     cache_miss_price_cents,
     multiplier,
+    billing_policy,
     max_concurrency,
     status
 FROM models

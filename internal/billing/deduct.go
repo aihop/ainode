@@ -21,12 +21,15 @@ func init() {
 
 // PreDeduct 执行预扣费。
 // 如果 Redis 缓存中不存在用户余额，会从 DB 加载后重试。
-func PreDeduct(ctx context.Context, queries *db.Queries, userID int32, estimatedCostCents int64) (int64, int64, error) {
+func PreDeduct(ctx context.Context, queries *db.Queries, userID int32, estimatedCostCents int64, billingPolicy string) (int64, int64, error) {
 	grantKey := fmt.Sprintf("grant_balance:%d", userID)
 	cashKey := fmt.Sprintf("cash_balance:%d", userID)
+	if billingPolicy == "" {
+		billingPolicy = "both"
+	}
 
 	keys := []string{grantKey, cashKey}
-	args := []interface{}{estimatedCostCents}
+	args := []interface{}{estimatedCostCents, billingPolicy}
 
 	result, err := preDeductScript.Run(ctx, RedisClient, keys, args...).Result()
 	if err != nil {

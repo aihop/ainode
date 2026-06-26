@@ -254,10 +254,11 @@ INSERT INTO
         cache_hit_price_cents,
         cache_miss_price_cents,
         multiplier,
+        billing_policy,
         max_concurrency,
         status
     )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, max_concurrency, status
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, billing_policy, max_concurrency, status
 `
 
 type CreateModelParams struct {
@@ -267,6 +268,7 @@ type CreateModelParams struct {
 	CacheHitPriceCents  int64
 	CacheMissPriceCents int64
 	Multiplier          float32
+	BillingPolicy       string
 	MaxConcurrency      int32
 	Status              pgtype.Int4
 }
@@ -279,6 +281,7 @@ func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (Model
 		arg.CacheHitPriceCents,
 		arg.CacheMissPriceCents,
 		arg.Multiplier,
+		arg.BillingPolicy,
 		arg.MaxConcurrency,
 		arg.Status,
 	)
@@ -291,6 +294,7 @@ func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (Model
 		&i.CacheHitPriceCents,
 		&i.CacheMissPriceCents,
 		&i.Multiplier,
+		&i.BillingPolicy,
 		&i.MaxConcurrency,
 		&i.Status,
 	)
@@ -350,7 +354,7 @@ func (q *Queries) GetChannelByID(ctx context.Context, id int32) (Channel, error)
 }
 
 const getModelByName = `-- name: GetModelByName :one
-SELECT id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, max_concurrency, status FROM models WHERE model_name = $1 AND status = 1 LIMIT 1
+SELECT id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, billing_policy, max_concurrency, status FROM models WHERE model_name = $1 AND status = 1 LIMIT 1
 `
 
 func (q *Queries) GetModelByName(ctx context.Context, modelName string) (Model, error) {
@@ -364,6 +368,7 @@ func (q *Queries) GetModelByName(ctx context.Context, modelName string) (Model, 
 		&i.CacheHitPriceCents,
 		&i.CacheMissPriceCents,
 		&i.Multiplier,
+		&i.BillingPolicy,
 		&i.MaxConcurrency,
 		&i.Status,
 	)
@@ -771,7 +776,7 @@ func (q *Queries) ListActiveChannels(ctx context.Context) ([]Channel, error) {
 }
 
 const listActiveModels = `-- name: ListActiveModels :many
-SELECT id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, max_concurrency, status FROM models WHERE status = 1 ORDER BY model_name ASC
+SELECT id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, billing_policy, max_concurrency, status FROM models WHERE status = 1 ORDER BY model_name ASC
 `
 
 func (q *Queries) ListActiveModels(ctx context.Context) ([]Model, error) {
@@ -791,6 +796,7 @@ func (q *Queries) ListActiveModels(ctx context.Context) ([]Model, error) {
 			&i.CacheHitPriceCents,
 			&i.CacheMissPriceCents,
 			&i.Multiplier,
+			&i.BillingPolicy,
 			&i.MaxConcurrency,
 			&i.Status,
 		); err != nil {
@@ -838,7 +844,7 @@ func (q *Queries) ListAllChannels(ctx context.Context) ([]Channel, error) {
 }
 
 const listAllModelsForAdmin = `-- name: ListAllModelsForAdmin :many
-SELECT id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, max_concurrency, status FROM models ORDER BY model_name ASC
+SELECT id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, billing_policy, max_concurrency, status FROM models ORDER BY model_name ASC
 `
 
 func (q *Queries) ListAllModelsForAdmin(ctx context.Context) ([]Model, error) {
@@ -858,6 +864,7 @@ func (q *Queries) ListAllModelsForAdmin(ctx context.Context) ([]Model, error) {
 			&i.CacheHitPriceCents,
 			&i.CacheMissPriceCents,
 			&i.Multiplier,
+			&i.BillingPolicy,
 			&i.MaxConcurrency,
 			&i.Status,
 		); err != nil {
@@ -1034,10 +1041,11 @@ SET
     cache_hit_price_cents = $4,
     cache_miss_price_cents = $5,
     multiplier = $6,
-    max_concurrency = $7,
-    status = $8
+    billing_policy = $7,
+    max_concurrency = $8,
+    status = $9
 WHERE
-    model_name = $1 RETURNING id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, max_concurrency, status
+    model_name = $1 RETURNING id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, billing_policy, max_concurrency, status
 `
 
 type UpdateModelParams struct {
@@ -1047,6 +1055,7 @@ type UpdateModelParams struct {
 	CacheHitPriceCents  int64
 	CacheMissPriceCents int64
 	Multiplier          float32
+	BillingPolicy       string
 	MaxConcurrency      int32
 	Status              pgtype.Int4
 }
@@ -1059,6 +1068,7 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (Model
 		arg.CacheHitPriceCents,
 		arg.CacheMissPriceCents,
 		arg.Multiplier,
+		arg.BillingPolicy,
 		arg.MaxConcurrency,
 		arg.Status,
 	)
@@ -1071,6 +1081,7 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (Model
 		&i.CacheHitPriceCents,
 		&i.CacheMissPriceCents,
 		&i.Multiplier,
+		&i.BillingPolicy,
 		&i.MaxConcurrency,
 		&i.Status,
 	)

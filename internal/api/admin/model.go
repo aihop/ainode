@@ -28,12 +28,16 @@ func (h *AdminHandler) CreateModel(w http.ResponseWriter, r *http.Request) {
 		CacheHitPriceCents  int64   `json:"cache_hit_price_cents"`
 		CacheMissPriceCents int64   `json:"cache_miss_price_cents"`
 		Multiplier          float32 `json:"multiplier"`
+		BillingPolicy       string  `json:"billing_policy"`
 		MaxConcurrency      int32   `json:"max_concurrency"`
 		Status              int32   `json:"status"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		errorResponse(w, http.StatusBadRequest, "Invalid request body")
 		return
+	}
+	if req.BillingPolicy == "" {
+		req.BillingPolicy = "both"
 	}
 
 	model, err := h.queries.CreateModel(r.Context(), db.CreateModelParams{
@@ -43,6 +47,7 @@ func (h *AdminHandler) CreateModel(w http.ResponseWriter, r *http.Request) {
 		CacheHitPriceCents:  req.CacheHitPriceCents,
 		CacheMissPriceCents: req.CacheMissPriceCents,
 		Multiplier:          req.Multiplier,
+		BillingPolicy:       req.BillingPolicy,
 		MaxConcurrency:      req.MaxConcurrency,
 		Status:              pgtype.Int4{Int32: req.Status, Valid: true},
 	})
@@ -69,12 +74,16 @@ func (h *AdminHandler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 		CacheHitPriceCents  int64   `json:"cache_hit_price_cents"`
 		CacheMissPriceCents int64   `json:"cache_miss_price_cents"`
 		Multiplier          float32 `json:"multiplier"`
+		BillingPolicy       string  `json:"billing_policy"`
 		MaxConcurrency      int32   `json:"max_concurrency"`
 		Status              int32   `json:"status"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		errorResponse(w, http.StatusBadRequest, "Invalid request body")
 		return
+	}
+	if req.BillingPolicy == "" {
+		req.BillingPolicy = "both"
 	}
 
 	model, err := h.queries.UpdateModel(r.Context(), db.UpdateModelParams{
@@ -84,6 +93,7 @@ func (h *AdminHandler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 		CacheHitPriceCents:  req.CacheHitPriceCents,
 		CacheMissPriceCents: req.CacheMissPriceCents,
 		Multiplier:          req.Multiplier,
+		BillingPolicy:       req.BillingPolicy,
 		MaxConcurrency:      req.MaxConcurrency,
 		Status:              pgtype.Int4{Int32: req.Status, Valid: true},
 	})

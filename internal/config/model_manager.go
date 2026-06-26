@@ -34,10 +34,11 @@ func (m *ModelManager) LoadModel(ctx context.Context, queries *db.Queries, model
 	defer m.mu.Unlock()
 	m.models[modelName] = model
 	log.Printf(
-		"Cached pricing for model: %s (Input: %d, Output: %d, MaxConcurrency: %d)",
+		"Cached pricing for model: %s (Input: %d, Output: %d, BillingPolicy: %s, MaxConcurrency: %d)",
 		modelName,
 		model.InputPriceCents,
 		model.OutputPriceCents,
+		model.BillingPolicy,
 		model.MaxConcurrency,
 	)
 

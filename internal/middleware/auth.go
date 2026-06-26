@@ -119,7 +119,7 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			estimatedCostCents := utils.ApplyMultiplier(estimatedBaseCostCents, modelInfo.Multiplier, true)
 
 			// 5. 调用预扣费 (如果余额不足会返回错误)
-			grantDeducted, cashDeducted, err := billing.PreDeduct(ctx, queries, user.ID, estimatedCostCents)
+			grantDeducted, cashDeducted, err := billing.PreDeduct(ctx, queries, user.ID, estimatedCostCents, modelInfo.BillingPolicy)
 			if err != nil {
 				utils.WriteOpenAIError(w, http.StatusPaymentRequired, "Insufficient balance", "invalid_request_error", "insufficient_quota")
 				return

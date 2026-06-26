@@ -16,6 +16,14 @@
 - `ReverseProxy.ModifyResponse` 的最终结算现在会对基础实际金额应用 `models.multiplier`，并使用**四舍五入**写入 `ActualCostCents`。
 - 这意味着 `multiplier` 从“仅存储、不生效”变成了**真实参与用户收费**的倍率字段；如果后台直接录入最终卖价，应保持 `multiplier = 1.0`。
 
+## 2026-05-15: 模型级余额策略 (`billing_policy`) 接入
+
+**业务能力扩展：**
+- 在 `models` 表新增 `billing_policy` 字段，支持 `both | cash_only | grant_only`，用于区分订阅赠送额度与 API 充值余额的可用范围。
+- 改造 `internal/billing/lua/pre_deduct.lua` 与 `billing.PreDeduct`，预扣费不再固定“先扣套餐再扣现金”，而是按模型策略决定扣款来源。
+- 更新 `internal/billing/settlement.go` 的极少数补扣分支，确保 `grant_only` 模型不会错误补扣到 `cash_balance`。
+- 更新后台模型管理 API 与 APayShop `ainode` 模型页，新增 `Billing Policy` 配置项；默认值为 `both`，保证现有模型不受影响。
+
 ## 2026-03-27: 阶段一：基础脚手架初始化
 
 **架构决策与依赖变更：**

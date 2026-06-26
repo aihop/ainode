@@ -94,14 +94,14 @@ AI 请严格按照以下结构组织代码：
 |------|------|---------|
 | `users` | 用户余额与订阅等级 | `cash_balance`, `grant_balance`, `tier_level`, `grant_expires_at` |
 | `api_keys` | 网关调用凭证 | `key_string`, `user_id`, `allowed_models`, `quota_limit` |
-| `models` | 模型定价、倍率与并发上限 | `model_name`, `input_price_cents`, `output_price_cents`, `multiplier`, `max_concurrency` |
+| `models` | 模型定价、余额策略、倍率与并发上限 | `model_name`, `input_price_cents`, `output_price_cents`, `billing_policy`, `multiplier`, `max_concurrency` |
 | `channels` | 上游渠道配置 | `provider`, `base_url`, `api_key`, `models`, `weight` |
 | `billing_logs` | 计费流水 | `user_id`, `model_name`, `amount_cents`, `prompt_tokens`, `completion_tokens` |
 
 ### 双余额体系设计
 
 - **`cash_balance`** (充值余额): 用户自主充值获得，永不过期。金额放大 10⁸ 倍存储。
-- **`grant_balance`** (订阅赠送余额): 按月订阅周期赠送，到期重置。扣费优先消耗此余额。
+- **`grant_balance`** (订阅赠送余额): 按月订阅周期赠送，到期重置。是否允许消耗此余额，由模型的 `billing_policy` 决定。
 
 ### 计费流水分区
 
@@ -147,27 +147,23 @@ Client Request
 -- KEYS[1]: grant_balance:user_id
 -- KEYS[2]: cash_balance:user_id
 -- ARGV[1]: 预估最大扣费金额
+-- ARGV[2]: 计费策略 (both | cash_only | grant_only)
 local cost = tonumber(ARGV[1])
-local grant_bal = tonumber(redis.call("GET", KEYS[1]) or "0")
-local cash_bal = tonumber(redis.call("GET", KEYS[2]) or "0")
-
-if (grant_bal + cash_bal) < cost then
-    return -1 -- 余额不足
-end
-
-if grant_bal >= cost then
-    redis.call("DECRBY", KEYS[1], cost)
-else
-    local remain_cost = cost - grant_bal
-    redis.call("SET", KEYS[1], 0)
-    redis.call("DECRBY", KEYS[2], remain_cost)
-end
-return 1
+local billing_policy = ARGV[2] or "both"
 ```
 
 > **结算退款**也必须遵循级联逻辑：优先退还到 `cash_balance`，超出部分再退还到 `grant_balance`。
 
-### 4.1.1 模型倍率 (`multiplier`) 生效规则
+### 4.1.1 模型余额策略 (`billing_policy`)
+
+- `models.billing_policy` 用于区分订阅套餐额度与 API 充值余额的可用范围。
+- 当前支持：
+  - `both`: 套餐额度和充值余额都可用，预扣时优先扣 `grant_balance`，不足再扣 `cash_balance`
+  - `cash_only`: 仅允许使用 `cash_balance`
+  - `grant_only`: 仅允许使用 `grant_balance`
+- 后台模型管理页新增 `Billing Policy` 选择项，默认值为 `both`，保证旧模型兼容。
+
+### 4.1.2 模型倍率 (`multiplier`) 生效规则
 
 - `models.input_price_cents / output_price_cents / cache_hit_price_cents / cache_miss_price_cents` 存放基础单价。
 - `models.multiplier` 是用户侧真实收费倍率，必须同时参与：
