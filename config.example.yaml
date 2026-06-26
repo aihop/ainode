@@ -1,0 +1,13 @@
+server:
+  port: 5900
+
+db:
+  dsn: ""
+
+redis:
+  addr: "redis:6379"
+  password: ""
+  db: 0
+
+internal:
+  token: ""

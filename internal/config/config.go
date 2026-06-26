@@ -40,7 +40,8 @@ func LoadConfig() {
 	viper.AddConfigPath(".")
 	viper.AddConfigPath("./config")
 
-	// Allow overriding via environment variables
+	// Allow overriding via environment variables (prefix: AINODE_)
+	viper.SetEnvPrefix("AINODE")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
