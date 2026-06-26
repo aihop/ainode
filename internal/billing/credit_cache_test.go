@@ -7,7 +7,7 @@ import (
 
 func TestCreditBalanceCache_IncrementsWhenKeyExists(t *testing.T) {
 	mr := newTestRedis(t)
-	setBalances(t, 1, 0, 100, 200) // sub_paid=0, grant=100, cash=200
+	setBalances(t, 1, 0, 100, 200) // sub=0, grant=100, cash=200
 
 	// credit cash +50
 	if err := CreditBalanceCache(context.Background(), 1, "cash", 50); err != nil {

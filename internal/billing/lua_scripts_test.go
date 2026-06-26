@@ -26,10 +26,10 @@ func newTestRedis(t *testing.T) *miniredis.Miniredis {
 	return mr
 }
 
-// setBalances 预置用户 1 的三池余额(sub_paid, grant, cash)。
-func setBalances(t *testing.T, userID int32, subPaid, grant, cash int64) {
+// setBalances 预置用户 1 的三池余额(sub, grant, cash)。
+func setBalances(t *testing.T, userID int32, sub, grant, cash int64) {
 	t.Helper()
-	if err := SyncUserBalanceCache(context.Background(), userID, subPaid, grant, cash); err != nil {
+	if err := SyncUserBalanceCache(context.Background(), userID, sub, grant, cash); err != nil {
 		t.Fatalf("failed to seed balances: %v", err)
 	}
 }
@@ -48,10 +48,10 @@ func balOf(t *testing.T, mr *miniredis.Miniredis, key string) int64 {
 }
 
 // assertBalances 校验用户 1 的三池余额。
-func assertBalances(t *testing.T, mr *miniredis.Miniredis, wantSubPaid, wantGrant, wantCash int64) {
+func assertBalances(t *testing.T, mr *miniredis.Miniredis, wantSub, wantGrant, wantCash int64) {
 	t.Helper()
-	if p := balOf(t, mr, "sub_paid_balance:1"); p != wantSubPaid {
-		t.Fatalf("sub_paid = %d, want %d", p, wantSubPaid)
+	if p := balOf(t, mr, "sub_balance:1"); p != wantSub {
+		t.Fatalf("sub = %d, want %d", p, wantSub)
 	}
 	if g := balOf(t, mr, "grant_balance:1"); g != wantGrant {
 		t.Fatalf("grant = %d, want %d", g, wantGrant)
@@ -61,29 +61,29 @@ func assertBalances(t *testing.T, mr *miniredis.Miniredis, wantSubPaid, wantGran
 	}
 }
 
-// ---------- pre_deduct.lua (三池有序 sub_paid → grant → cash) ----------
+// ---------- pre_deduct.lua (三池有序 sub → grant → cash) ----------
 
-func TestPreDeduct_SubPaidCoversCost(t *testing.T) {
+func TestPreDeduct_SubCoversCost(t *testing.T) {
 	mr := newTestRedis(t)
 	setBalances(t, 1, 100, 50, 50)
 	d, err := PreDeduct(context.Background(), nil, 1, 80, "all")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if d.SubPaid != 80 || d.Grant != 0 || d.Cash != 0 {
+	if d.Sub != 80 || d.Grant != 0 || d.Cash != 0 {
 		t.Fatalf("deducted %+v, want 80/0/0", d)
 	}
 	assertBalances(t, mr, 20, 50, 50)
 }
 
-func TestPreDeduct_CascadeSubPaidToGrant(t *testing.T) {
+func TestPreDeduct_CascadeSubToGrant(t *testing.T) {
 	mr := newTestRedis(t)
 	setBalances(t, 1, 30, 100, 50)
 	d, err := PreDeduct(context.Background(), nil, 1, 80, "all")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if d.SubPaid != 30 || d.Grant != 50 || d.Cash != 0 {
+	if d.Sub != 30 || d.Grant != 50 || d.Cash != 0 {
 		t.Fatalf("deducted %+v, want 30/50/0", d)
 	}
 	assertBalances(t, mr, 0, 50, 50)
@@ -96,7 +96,7 @@ func TestPreDeduct_CascadeThroughAllThree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if d.SubPaid != 30 || d.Grant != 30 || d.Cash != 20 {
+	if d.Sub != 30 || d.Grant != 30 || d.Cash != 20 {
 		t.Fatalf("deducted %+v, want 30/30/20", d)
 	}
 	assertBalances(t, mr, 0, 0, 80)
@@ -118,7 +118,7 @@ func TestPreDeduct_CashOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if d.SubPaid != 0 || d.Grant != 0 || d.Cash != 40 {
+	if d.Sub != 0 || d.Grant != 0 || d.Cash != 40 {
 		t.Fatalf("deducted %+v, want 0/0/40", d)
 	}
 	assertBalances(t, mr, 100, 100, 10)
@@ -127,12 +127,12 @@ func TestPreDeduct_CashOnly(t *testing.T) {
 func TestPreDeduct_GrantOnlyUsesSubscriptionPools(t *testing.T) {
 	mr := newTestRedis(t)
 	setBalances(t, 1, 100, 100, 50)
-	// grant_only = 订阅池(sub_paid + grant),不含 cash;先扣 sub_paid
+	// grant_only = 订阅池(sub + grant),不含 cash;先扣 sub
 	d, err := PreDeduct(context.Background(), nil, 1, 40, "grant_only")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if d.SubPaid != 40 || d.Grant != 0 || d.Cash != 0 {
+	if d.Sub != 40 || d.Grant != 0 || d.Cash != 0 {
 		t.Fatalf("deducted %+v, want 40/0/0", d)
 	}
 	assertBalances(t, mr, 60, 100, 50)
@@ -147,10 +147,10 @@ func TestPreDeduct_GrantOnlyInsufficient(t *testing.T) {
 	assertBalances(t, mr, 10, 20, 1000)
 }
 
-// ---------- refund.lua (三池逆序 cash → grant → sub_paid) ----------
+// ---------- refund.lua (三池逆序 cash → grant → sub) ----------
 
 func refund(userID int32, amount, sp, gr, ca int64) {
-	Refund(context.Background(), nil, userID, amount, Deduction{SubPaid: sp, Grant: gr, Cash: ca}, "req")
+	Refund(context.Background(), nil, userID, amount, Deduction{Sub: sp, Grant: gr, Cash: ca}, "req")
 }
 
 func TestRefund_WithinCash(t *testing.T) {
@@ -170,18 +170,18 @@ func TestRefund_SpillsCashToGrant(t *testing.T) {
 func TestRefund_ReverseOrderAcrossThree(t *testing.T) {
 	mr := newTestRedis(t)
 	setBalances(t, 1, 0, 0, 0)
-	refund(1, 100, 20, 30, 50) // 逆序:cash 50, grant 30, sub_paid 20
+	refund(1, 100, 20, 30, 50) // 逆序:cash 50, grant 30, sub 20
 	assertBalances(t, mr, 20, 30, 50)
 }
 
-func TestRefund_AllFromSubPaid(t *testing.T) {
+func TestRefund_AllFromSub(t *testing.T) {
 	mr := newTestRedis(t)
 	setBalances(t, 1, 0, 0, 0)
 	refund(1, 40, 40, 0, 0)
 	assertBalances(t, mr, 40, 0, 0)
 }
 
-// ---------- compensate.lua (三池正序 sub_paid → grant → cash, 带下限) ----------
+// ---------- compensate.lua (三池正序 sub → grant → cash, 带下限) ----------
 
 func runCompensate(t *testing.T, amount int64, policy string) {
 	t.Helper()
@@ -190,7 +190,7 @@ func runCompensate(t *testing.T, amount int64, policy string) {
 	}
 }
 
-func TestCompensate_SubPaidFirst(t *testing.T) {
+func TestCompensate_SubFirst(t *testing.T) {
 	mr := newTestRedis(t)
 	setBalances(t, 1, 100, 100, 100)
 	runCompensate(t, 50, "all")
@@ -200,7 +200,7 @@ func TestCompensate_SubPaidFirst(t *testing.T) {
 func TestCompensate_CascadesAcrossThree(t *testing.T) {
 	mr := newTestRedis(t)
 	setBalances(t, 1, 30, 30, 100)
-	runCompensate(t, 80, "all") // sub_paid 30→0, grant 30→0, cash 扣 20
+	runCompensate(t, 80, "all") // sub 30→0, grant 30→0, cash 扣 20
 	assertBalances(t, mr, 0, 0, 80)
 }
 
@@ -221,6 +221,6 @@ func TestCompensate_CashOnly(t *testing.T) {
 func TestCompensate_GrantOnly(t *testing.T) {
 	mr := newTestRedis(t)
 	setBalances(t, 1, 100, 100, 100)
-	runCompensate(t, 30, "grant_only") // 订阅池正序,先扣 sub_paid
+	runCompensate(t, 30, "grant_only") // 订阅池正序,先扣 sub
 	assertBalances(t, mr, 70, 100, 100)
 }

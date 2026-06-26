@@ -231,10 +231,10 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 		upstreamModelName, _ := ctx.Value(reqctx.KeyUpstreamModelName).(string)
 		reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
 		preDeductedCents, _ := ctx.Value(reqctx.KeyPreDeductedCents).(int64)
-		subPaidDeducted, _ := ctx.Value(reqctx.KeySubPaidDeducted).(int64)
+		subDeducted, _ := ctx.Value(reqctx.KeySubDeducted).(int64)
 		grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
 		cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
-		prededuction := billing.Deduction{SubPaid: subPaidDeducted, Grant: grantDeducted, Cash: cashDeducted}
+		prededuction := billing.Deduction{Sub: subDeducted, Grant: grantDeducted, Cash: cashDeducted}
 		promptTokens, _ := ctx.Value(reqctx.KeyPromptTokens).(int)
 		requestType, _ := ctx.Value(reqctx.KeyRequestType).(string)
 		billingUnits, _ := ctx.Value(reqctx.KeyBillingUnits).(int64)
@@ -337,7 +337,7 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				CacheHitTokens:   int32(cacheHitTokens),
 				CacheMissTokens:  int32(cacheMissTokens),
 				PreDeductedCents: preDeductedCents,
-				SubPaidDeducted:  subPaidDeducted,
+				SubDeducted:      subDeducted,
 				GrantDeducted:    grantDeducted,
 				CashDeducted:     cashDeducted,
 				ActualCostCents:  actualCost,
@@ -436,14 +436,14 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			if isBillingRoute {
 				userID, _ := ctx.Value(reqctx.KeyUserID).(int32)
 				preDeductedCents, _ := ctx.Value(reqctx.KeyPreDeductedCents).(int64)
-				subPaidDeducted, _ := ctx.Value(reqctx.KeySubPaidDeducted).(int64)
+				subDeducted, _ := ctx.Value(reqctx.KeySubDeducted).(int64)
 				grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
 				cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
 				reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
 				if preDeductedCents > 0 {
 					ectx, ecancel := newBillingWriteCtx()
 					billing.Refund(ectx, queries, userID, preDeductedCents,
-						billing.Deduction{SubPaid: subPaidDeducted, Grant: grantDeducted, Cash: cashDeducted}, reqID)
+						billing.Deduction{Sub: subDeducted, Grant: grantDeducted, Cash: cashDeducted}, reqID)
 					ecancel()
 				}
 			}

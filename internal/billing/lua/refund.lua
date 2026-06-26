@@ -1,7 +1,7 @@
--- 三池退款：按消费逆序退回 cash → grant → sub_paid，各池最多退回其当初扣额。
--- KEYS[1]=sub_paid_balance:uid  KEYS[2]=grant_balance:uid  KEYS[3]=cash_balance:uid
+-- 三池退款：按消费逆序退回 cash → grant → sub，各池最多退回其当初扣额。
+-- KEYS[1]=sub_balance:uid  KEYS[2]=grant_balance:uid  KEYS[3]=cash_balance:uid
 -- ARGV[1]=refund_amount
--- ARGV[2]=sub_paid_deducted  ARGV[3]=grant_deducted  ARGV[4]=cash_deducted
+-- ARGV[2]=sub_deducted  ARGV[3]=grant_deducted  ARGV[4]=cash_deducted
 -- 逆序退：尽量把「可退的现金」留给用户。
 
 local amt = tonumber(ARGV[1])
@@ -25,5 +25,5 @@ end
 
 give(KEYS[3], cd) -- 先退 cash
 give(KEYS[2], gd) -- 再退 grant
-give(KEYS[1], pd) -- 最后退 sub_paid
+give(KEYS[1], pd) -- 最后退 sub
 return 1

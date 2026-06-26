@@ -8,13 +8,13 @@ func TestSplitActual3(t *testing.T) {
 		actual, sp, gr, ca     int64
 		wantSP, wantGR, wantCA int64
 	}{
-		{"within sub_paid", 40, 100, 50, 50, 40, 0, 0},
+		{"within sub", 40, 100, 50, 50, 40, 0, 0},
 		{"cascade to grant", 80, 30, 100, 50, 30, 50, 0},
 		{"cascade through all", 80, 30, 30, 100, 30, 30, 20},
-		{"no sub_paid -> grant then cash", 80, 0, 30, 100, 0, 30, 50},
+		{"no sub -> grant then cash", 80, 0, 30, 100, 0, 30, 50},
 		{"all cash", 50, 0, 0, 100, 0, 0, 50},
 		{"zero cost", 0, 100, 100, 100, 0, 0, 0},
-		{"exactly sub_paid", 30, 30, 50, 50, 30, 0, 0},
+		{"exactly sub", 30, 30, 50, 50, 30, 0, 0},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

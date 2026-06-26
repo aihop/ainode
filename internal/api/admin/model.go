@@ -22,17 +22,17 @@ func (h *AdminHandler) ListModels(w http.ResponseWriter, r *http.Request) {
 // CreateModel
 func (h *AdminHandler) CreateModel(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ModelName           string          `json:"model_name"`
-		InputPriceCents     int64           `json:"input_price_cents"`
-		OutputPriceCents    int64           `json:"output_price_cents"`
-		CacheHitPriceCents  int64           `json:"cache_hit_price_cents"`
-		CacheMissPriceCents int64           `json:"cache_miss_price_cents"`
+		ModelName           string          `json:"modelName"`
+		InputPriceCents     int64           `json:"inputPriceCents"`
+		OutputPriceCents    int64           `json:"outputPriceCents"`
+		CacheHitPriceCents  int64           `json:"cacheHitPriceCents"`
+		CacheMissPriceCents int64           `json:"cacheMissPriceCents"`
 		Multiplier          float32         `json:"multiplier"`
-		BillingPolicy       string          `json:"billing_policy"`
+		BillingPolicy       string          `json:"billingPolicy"`
 		Modality            string          `json:"modality"`
-		PricingMode         string          `json:"pricing_mode"`
-		PricingConfig       json.RawMessage `json:"pricing_config"`
-		MaxConcurrency      int32           `json:"max_concurrency"`
+		PricingMode         string          `json:"pricingMode"`
+		PricingConfig       json.RawMessage `json:"pricingConfig"`
+		MaxConcurrency      int32           `json:"maxConcurrency"`
 		Status              int32           `json:"status"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -81,16 +81,16 @@ func (h *AdminHandler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		InputPriceCents     int64           `json:"input_price_cents"`
-		OutputPriceCents    int64           `json:"output_price_cents"`
-		CacheHitPriceCents  int64           `json:"cache_hit_price_cents"`
-		CacheMissPriceCents int64           `json:"cache_miss_price_cents"`
+		InputPriceCents     int64           `json:"inputPriceCents"`
+		OutputPriceCents    int64           `json:"outputPriceCents"`
+		CacheHitPriceCents  int64           `json:"cacheHitPriceCents"`
+		CacheMissPriceCents int64           `json:"cacheMissPriceCents"`
 		Multiplier          float32         `json:"multiplier"`
-		BillingPolicy       string          `json:"billing_policy"`
+		BillingPolicy       string          `json:"billingPolicy"`
 		Modality            string          `json:"modality"`
-		PricingMode         string          `json:"pricing_mode"`
-		PricingConfig       json.RawMessage `json:"pricing_config"`
-		MaxConcurrency      int32           `json:"max_concurrency"`
+		PricingMode         string          `json:"pricingMode"`
+		PricingConfig       json.RawMessage `json:"pricingConfig"`
+		MaxConcurrency      int32           `json:"maxConcurrency"`
 		Status              int32           `json:"status"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

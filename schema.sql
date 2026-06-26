@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     cash_balance BIGINT DEFAULT 0, -- 充值余额（永不过期），金额放大 10^8 倍存储
     grant_balance BIGINT DEFAULT 0, -- 订阅周期赠送余额（按周期清零），放大 10^8 倍存储
     tier_level INT DEFAULT 0, -- 订阅等级 (0: Free, 1: Pro, 2: Enterprise)，用于网关高并发优先级控制
-    -- 订阅到期时间统一用 sub_expires_at（见下方 ALTER，替代旧 grant_expires_at）
+    -- 订阅到期时间：sub_expires_at 由下方 ALTER 添加
     status INT DEFAULT 1, -- 1: 正常, 0: 禁用
     last_login_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -221,9 +221,9 @@ CREATE TABLE IF NOT EXISTS model_failure_logs (
 );
 
 -- 添加索引
--- 订阅三池:新增「订阅实付」池 sub_paid_balance(10^8 放大),消费序最高;
+-- 订阅三池:新增「订阅实付」池 sub_balance(10^8 放大),消费序最高;
 -- grant_balance 复用为「订阅赠送」,cash_balance 为充值余额。sub_expires_at 为本订阅周期到期。
-ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_paid_balance BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_balance BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_expires_at TIMESTAMP WITH TIME ZONE;
 CREATE INDEX IF NOT EXISTS idx_users_sub_expires_at ON users (sub_expires_at) WHERE sub_expires_at IS NOT NULL;
 
@@ -240,8 +240,8 @@ CREATE INDEX IF NOT EXISTS idx_billing_user_id ON billing_logs (user_id);
 -- 用户侧统计/账单/仪表盘均按 (user_id, created_at) 过滤，组合索引避免单列索引 + 过滤
 CREATE INDEX IF NOT EXISTS idx_billing_user_created_at ON billing_logs (user_id, created_at DESC);
 
--- 异步任务也纳入三池:记录预扣中来自订阅实付池的金额,失败/取消退款时正确退回 sub_paid。
-ALTER TABLE async_tasks ADD COLUMN IF NOT EXISTS sub_paid_deducted BIGINT NOT NULL DEFAULT 0;
+-- 异步任务也纳入三池:记录预扣中来自订阅实付池的金额,失败/取消退款时正确退回 sub。
+ALTER TABLE async_tasks ADD COLUMN IF NOT EXISTS sub_deducted BIGINT NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_async_tasks_user_created_at ON async_tasks (user_id, created_at DESC);
 

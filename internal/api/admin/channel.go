@@ -25,14 +25,14 @@ func (h *AdminHandler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name          string          `json:"name"`
 		Provider      string          `json:"provider"`
-		BaseUrl       string          `json:"base_url"`
-		ApiKey        string          `json:"api_key"`
+		BaseUrl       string          `json:"baseUrl"`
+		ApiKey        string          `json:"apiKey"`
 		Weight        int32           `json:"weight"`
 		Models        string          `json:"models"`
-		ProtocolType  string          `json:"protocol_type"`
-		UploadMode    string          `json:"upload_mode"`
-		ModelMapping  json.RawMessage `json:"model_mapping"`
-		SupportsAsync bool            `json:"supports_async"`
+		ProtocolType  string          `json:"protocolType"`
+		UploadMode    string          `json:"uploadMode"`
+		ModelMapping  json.RawMessage `json:"modelMapping"`
+		SupportsAsync bool            `json:"supportsAsync"`
 		Status        int32           `json:"status"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -81,14 +81,14 @@ func (h *AdminHandler) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name          string          `json:"name"`
 		Provider      string          `json:"provider"`
-		BaseUrl       string          `json:"base_url"`
-		ApiKey        string          `json:"api_key"`
+		BaseUrl       string          `json:"baseUrl"`
+		ApiKey        string          `json:"apiKey"`
 		Weight        int32           `json:"weight"`
 		Models        string          `json:"models"`
-		ProtocolType  string          `json:"protocol_type"`
-		UploadMode    string          `json:"upload_mode"`
-		ModelMapping  json.RawMessage `json:"model_mapping"`
-		SupportsAsync bool            `json:"supports_async"`
+		ProtocolType  string          `json:"protocolType"`
+		UploadMode    string          `json:"uploadMode"`
+		ModelMapping  json.RawMessage `json:"modelMapping"`
+		SupportsAsync bool            `json:"supportsAsync"`
 		Status        int32           `json:"status"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

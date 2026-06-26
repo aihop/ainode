@@ -39,26 +39,26 @@ type SettlementRequest struct {
 	CacheHitTokens   int32  `json:"cache_hit_tokens"`
 	CacheMissTokens  int32  `json:"cache_miss_tokens"`
 	PreDeductedCents int64  `json:"pre_deducted_cents"`
-	SubPaidDeducted  int64  `json:"sub_paid_deducted"`
+	SubDeducted      int64  `json:"sub_deducted"`
 	GrantDeducted    int64  `json:"grant_deducted"`
 	CashDeducted     int64  `json:"cash_deducted"`
 	ActualCostCents  int64  `json:"actual_cost_cents"`
 	RequestID        string `json:"request_id"`
 }
 
-// balanceKeys3 返回三池 Redis key(顺序与 Lua 脚本 KEYS 一致:sub_paid, grant, cash)。
+// balanceKeys3 返回三池 Redis key(顺序与 Lua 脚本 KEYS 一致:sub, grant, cash)。
 func balanceKeys3(userID int32) []string {
-	return []string{SubPaidBalanceKey(userID), GrantBalanceKey(userID), CashBalanceKey(userID)}
+	return []string{SubBalanceKey(userID), GrantBalanceKey(userID), CashBalanceKey(userID)}
 }
 
 // Refund 退还预扣费 (发生系统错误或完全未消费时调用)。
-// 按消费逆序退回 cash→grant→sub_paid,各池最多退回其当初扣额。
+// 按消费逆序退回 cash→grant→sub,各池最多退回其当初扣额。
 func Refund(ctx context.Context, queries *db.Queries, userID int32, amountCents int64, d Deduction, requestID string) {
 	if amountCents <= 0 {
 		return
 	}
 
-	args := []interface{}{amountCents, d.SubPaid, d.Grant, d.Cash}
+	args := []interface{}{amountCents, d.Sub, d.Grant, d.Cash}
 	if err := refundScript.Run(ctx, RedisClient, balanceKeys3(userID), args...).Err(); err != nil {
 		log.Printf("ERROR: Failed to refund redis balance for user %d: %v", userID, err)
 	}
@@ -76,13 +76,13 @@ func Settle(ctx context.Context, queries *db.Queries, req SettlementRequest) err
 	// 如果 diff < 0，说明预扣少了，目前的 pre_deduct 逻辑是按照 max_tokens 预扣，理论上不应该少。
 	// 但如果真的少了，需要补扣 (此处简单处理，后续可扩展补扣 Lua 脚本)
 	if diff > 0 {
-		// 预扣多了 → 按消费逆序退回(cash→grant→sub_paid),各池最多退回其当初扣额。
-		args := []interface{}{diff, req.SubPaidDeducted, req.GrantDeducted, req.CashDeducted}
+		// 预扣多了 → 按消费逆序退回(cash→grant→sub),各池最多退回其当初扣额。
+		args := []interface{}{diff, req.SubDeducted, req.GrantDeducted, req.CashDeducted}
 		if err := refundScript.Run(ctx, RedisClient, balanceKeys3(req.UserID), args...).Err(); err != nil {
 			log.Printf("ERROR: Failed to compensate redis balance for user %d: %v", req.UserID, err)
 		}
 	} else if diff < 0 {
-		// 预扣少了 → 按消费正序补扣(sub_paid→grant→cash),带余额下限,绝不为负。
+		// 预扣少了 → 按消费正序补扣(sub→grant→cash),带余额下限,绝不为负。
 		billingPolicy := "all"
 		if queries != nil {
 			if modelInfo, err := queries.GetModelByName(ctx, req.ModelName); err == nil && modelInfo.BillingPolicy != "" {

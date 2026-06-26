@@ -28,9 +28,9 @@ func NewBillingTaskProcessor(queries *db.Queries, pool *pgxpool.Pool) *BillingTa
 	}
 }
 
-// splitActual3 把实际消费金额按消费顺序 sub_paid → grant → cash 拆分到三池。
+// splitActual3 把实际消费金额按消费顺序 sub → grant → cash 拆分到三池。
 // 纯函数，便于单测:实际费用从「预扣各池」的头部依次消耗(退款是从尾部退,故保留的实付在头部)。
-func splitActual3(actualCost, subPaidDeducted, grantDeducted, cashDeducted int64) (subPaid, grant, cash int64) {
+func splitActual3(actualCost, subDeducted, grantDeducted, cashDeducted int64) (sub, grant, cash int64) {
 	rem := actualCost
 	take := func(deducted int64) int64 {
 		if rem <= 0 || deducted <= 0 {
@@ -43,10 +43,10 @@ func splitActual3(actualCost, subPaidDeducted, grantDeducted, cashDeducted int64
 		rem -= t
 		return t
 	}
-	subPaid = take(subPaidDeducted)
+	sub = take(subDeducted)
 	grant = take(grantDeducted)
 	cash = take(cashDeducted)
-	return subPaid, grant, cash
+	return sub, grant, cash
 }
 
 // HandleRecordBillingLog 处理写入流水和扣减 DB 余额的任务。
@@ -84,11 +84,11 @@ func (processor *BillingTaskProcessor) HandleRecordBillingLog(ctx context.Contex
 		}
 	}
 
-	// 2. 计算实际扣减 DB 三池余额 (消费顺序 sub_paid → grant → cash)
-	actualSubPaid, actualGrant, actualCash := splitActual3(req.ActualCostCents, req.SubPaidDeducted, req.GrantDeducted, req.CashDeducted)
+	// 2. 计算实际扣减 DB 三池余额 (消费顺序 sub → grant → cash)
+	actualSub, actualGrant, actualCash := splitActual3(req.ActualCostCents, req.SubDeducted, req.GrantDeducted, req.CashDeducted)
 
-	if err := qtx.UpdateUserSubPaidBalance(ctx, req.UserID, -actualSubPaid); err != nil {
-		log.Printf("Worker ERROR: Failed to update DB sub_paid balance for user %d: %v", req.UserID, err)
+	if err := qtx.UpdateUserSubBalance(ctx, req.UserID, -actualSub); err != nil {
+		log.Printf("Worker ERROR: Failed to update DB sub balance for user %d: %v", req.UserID, err)
 		return err
 	}
 

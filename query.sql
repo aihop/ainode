@@ -8,7 +8,7 @@ SELECT
     u.cash_balance,
     u.grant_balance,
     u.tier_level AS user_tier,
-    u.grant_expires_at,
+    u.sub_expires_at,
     u.status,
     u.last_login_at,
     u.created_at,
@@ -53,7 +53,7 @@ WHERE
 UPDATE users
 SET
     grant_balance = $2,
-    grant_expires_at = $3,
+    sub_expires_at = $3,
     tier_level = $4
 WHERE
     id = $1;

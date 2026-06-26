@@ -249,7 +249,7 @@ func (h *AdminHandler) AdjustUserBalance(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req struct {
-		BalanceType string  `json:"balance_type"`
+		BalanceType string  `json:"balanceType"`
 		Amount      float64 `json:"amount"`
 		Remark      string  `json:"remark"`
 	}
@@ -386,7 +386,7 @@ func (h *AdminHandler) AdjustUserBalance(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// 用相对增减(INCRBY)同步缓存:只动被调整的那个池(cash/grant),不覆盖 sub_paid 等其它池,
+	// 用相对增减(INCRBY)同步缓存:只动被调整的那个池(cash/grant),不覆盖 sub 等其它池,
 	// 也避免用绝对值覆盖掉在途扣减。
 	cacheSynced := true
 	if err := billing.CreditBalanceCache(ctx, int32(id), req.BalanceType, scaledAmount); err != nil {

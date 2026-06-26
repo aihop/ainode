@@ -209,7 +209,7 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			ctx = context.WithValue(ctx, reqctx.KeyRequestType, requestType)
 			ctx = context.WithValue(ctx, reqctx.KeyPromptTokens, promptTokens)
 			ctx = context.WithValue(ctx, reqctx.KeyPreDeductedCents, estimatedCostCents)
-			ctx = context.WithValue(ctx, reqctx.KeySubPaidDeducted, deduction.SubPaid)
+			ctx = context.WithValue(ctx, reqctx.KeySubDeducted, deduction.Sub)
 			ctx = context.WithValue(ctx, reqctx.KeyGrantDeducted, deduction.Grant)
 			ctx = context.WithValue(ctx, reqctx.KeyCashDeducted, deduction.Cash)
 			ctx = context.WithValue(ctx, reqctx.KeyBillingUnits, billingUnits)

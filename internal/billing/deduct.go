@@ -21,21 +21,21 @@ func init() {
 
 // Deduction 记录一次扣费在三池中各扣了多少(10^8 放大整数)。
 type Deduction struct {
-	SubPaid int64 // 订阅实付池
-	Grant   int64 // 订阅赠送池
-	Cash    int64 // 充值余额池
+	Sub   int64 // 订阅实付池
+	Grant int64 // 订阅赠送池
+	Cash  int64 // 充值余额池
 }
 
 // Total 返回三池合计。
-func (d Deduction) Total() int64 { return d.SubPaid + d.Grant + d.Cash }
+func (d Deduction) Total() int64 { return d.Sub + d.Grant + d.Cash }
 
-// PreDeduct 执行三池有序预扣(sub_paid → grant → cash)。
+// PreDeduct 执行三池有序预扣(sub → grant → cash)。
 // 若 Redis 缓存中不存在用户余额，会从 DB 加载后重试。
 func PreDeduct(ctx context.Context, queries *db.Queries, userID int32, estimatedCostCents int64, billingPolicy string) (Deduction, error) {
 	if billingPolicy == "" {
 		billingPolicy = "all"
 	}
-	keys := []string{SubPaidBalanceKey(userID), GrantBalanceKey(userID), CashBalanceKey(userID)}
+	keys := []string{SubBalanceKey(userID), GrantBalanceKey(userID), CashBalanceKey(userID)}
 	args := []interface{}{estimatedCostCents, billingPolicy}
 
 	run := func() ([]interface{}, error) {
@@ -72,23 +72,23 @@ func PreDeduct(ctx context.Context, queries *db.Queries, userID int32, estimated
 	}
 
 	d := Deduction{
-		SubPaid: arr[1].(int64),
-		Grant:   arr[2].(int64),
-		Cash:    arr[3].(int64),
+		Sub:   arr[1].(int64),
+		Grant: arr[2].(int64),
+		Cash:  arr[3].(int64),
 	}
-	log.Printf("User %d pre-deducted %d cents (sub_paid:%d grant:%d cash:%d)", userID, estimatedCostCents, d.SubPaid, d.Grant, d.Cash)
+	log.Printf("User %d pre-deducted %d cents (sub:%d grant:%d cash:%d)", userID, estimatedCostCents, d.Sub, d.Grant, d.Cash)
 	return d, nil
 }
 
 // LoadBalanceToCache 从 DB 读取用户三池余额并写入 Redis。
 func LoadBalanceToCache(ctx context.Context, queries *db.Queries, userID int32) error {
-	subPaid, grant, cash, err := queries.GetUserBalances(ctx, userID)
+	sub, grant, cash, err := queries.GetUserBalances(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("user not found: %w", err)
 	}
-	if err := SyncUserBalanceCache(ctx, userID, subPaid, grant, cash); err != nil {
+	if err := SyncUserBalanceCache(ctx, userID, sub, grant, cash); err != nil {
 		return fmt.Errorf("failed to set balance in redis: %w", err)
 	}
-	log.Printf("Loaded balance for user %d: sub_paid=%d grant=%d cash=%d cents", userID, subPaid, grant, cash)
+	log.Printf("Loaded balance for user %d: sub=%d grant=%d cash=%d cents", userID, sub, grant, cash)
 	return nil
 }

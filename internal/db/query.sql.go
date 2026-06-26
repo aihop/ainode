@@ -1099,28 +1099,28 @@ LIMIT 1
 `
 
 type GetUserByAPIKeyRow struct {
-	ID             int32
-	Email          string
-	PasswordHash   string
-	Nickname       pgtype.Text
-	AvatarUrl      pgtype.Text
-	CashBalance    pgtype.Int8
-	GrantBalance   pgtype.Int8
-	UserTier       pgtype.Int4
-	SubExpiresAt pgtype.Timestamptz
-	Status         pgtype.Int4
-	LastLoginAt    pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	KeyID          int32
-	KeyName        string
-	KeyString      string
-	OrderID        pgtype.Text
-	ProductID      pgtype.Int4
-	KeyTier        pgtype.Int4
-	QuotaLimit     pgtype.Int8
-	QuotaUsed      pgtype.Int8
-	AllowedModels  []byte
-	KeyStatus      pgtype.Int4
+	ID            int32
+	Email         string
+	PasswordHash  string
+	Nickname      pgtype.Text
+	AvatarUrl     pgtype.Text
+	CashBalance   pgtype.Int8
+	GrantBalance  pgtype.Int8
+	UserTier      pgtype.Int4
+	SubExpiresAt  pgtype.Timestamptz
+	Status        pgtype.Int4
+	LastLoginAt   pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	KeyID         int32
+	KeyName       string
+	KeyString     string
+	OrderID       pgtype.Text
+	ProductID     pgtype.Int4
+	KeyTier       pgtype.Int4
+	QuotaLimit    pgtype.Int8
+	QuotaUsed     pgtype.Int8
+	AllowedModels []byte
+	KeyStatus     pgtype.Int4
 }
 
 func (q *Queries) GetUserByAPIKey(ctx context.Context, keyString string) (GetUserByAPIKeyRow, error) {
@@ -2306,10 +2306,10 @@ WHERE
 `
 
 type UpdateUserSubBalanceParams struct {
-	ID             int32
-	GrantBalance   pgtype.Int8
+	ID           int32
+	GrantBalance pgtype.Int8
 	SubExpiresAt pgtype.Timestamptz
-	TierLevel      pgtype.Int4
+	TierLevel    pgtype.Int4
 }
 
 func (q *Queries) UpdateUserSubBalance(ctx context.Context, arg UpdateUserSubBalanceParams) error {

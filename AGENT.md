@@ -1,7 +1,7 @@
 # AI Node: 高性能 AI 模型网关与计费系统
 
 > **变更日志 (Changelog)**
-> `2026-06-27`: 订阅三池计费落地。新增「订阅实付」池 `users.sub_paid_balance`(+`sub_expires_at`),`grant_balance` 复用为订阅赠送,消费顺序 sub_paid→grant→cash。预扣/退款/补扣 Lua 改三池(逆序退款、正序补扣、下限保护),结算与 Worker 按三池拆分(`splitActual3`),钱包接口返回三池明细。新增统一状态机 `billing.ApplySubscription`(订阅/续费/升级/降级/取消/过期同一入口:旧实付剩余→cash、赠送清零、覆盖新额度,event_id 幂等),接入 webhook 事件 `subscription.apply`/`subscription.cancel`,并加每日订阅过期清理兜底。设计见 docs/ai/subscription-3pool-design.md。
+> `2026-06-27`: 订阅三池计费落地。新增「订阅实付」池 `users.sub_balance`(+`sub_expires_at`),`grant_balance` 复用为订阅赠送,消费顺序 sub→grant→cash。预扣/退款/补扣 Lua 改三池(逆序退款、正序补扣、下限保护),结算与 Worker 按三池拆分(`splitActual3`),钱包接口返回三池明细。新增统一状态机 `billing.ApplySubscription`(订阅/续费/升级/降级/取消/过期同一入口:旧实付剩余→cash、赠送清零、覆盖新额度,event_id 幂等),接入 webhook 事件 `subscription.apply`/`subscription.cancel`,并加每日订阅过期清理兜底。设计见 docs/ai/subscription-3pool-design.md。
 > `2026-06-27`: 修复 webhook 充值只写 `transactions` 漏写 `balance_logs`，导致「资金/余额流水」看不到 webhook 入账；现 `processTransaction` 同事务补写 balance_logs，与管理员直充口径一致，见 Section 8.3.1。webhook 路由对齐 `/api/*` 命名：新增 `/api/webhooks/events`，旧 `/internal/webhooks/events` 过渡期双注册。性能:`pgxpool` 显式配置连接池(默认 MaxConns=20)、新增 `api_keys(user_id,created_at)` 与 `billing_logs(user_id,created_at)` 索引、admin 用户汇总拆为 `/api/admin/users/summary`。
 > `2026-06-27`: 修复缓存计价少收：无缓存明细时 prompt 按 `input_price_cents`（而非 cacheMiss=0），cacheMiss 未配回退 inputPrice；`multiplier<=0` 按 1 处理防白嫖；结算计价抽成纯函数 `proxy/pricing.go::computeActualCost` 并加单测；模型并发占位 TTL 2m→15m 防长流式中途丢槽，见 Section 4.1.2 / 4.1.3。
 > `2026-06-27`: 新增独立钱包接口 `GET /api/site/wallet`（进账 funded / 用了 spent / 还剩 available + 现金/赠金明细），dashboard 移除钱包块回归活动概览，stats 去除重复的累计消耗（累计消耗唯一出口为 wallet.spent），见 Section 2 与 Section 6。
@@ -157,7 +157,7 @@ AI 请严格按照以下结构组织代码：
 
 | 表名 | 用途 | 关键字段 |
 |------|------|---------|
-| `users` | 用户余额与订阅等级 | `cash_balance`, `grant_balance`, `tier_level`, `grant_expires_at` |
+| `users` | 用户余额与订阅等级 | `cash_balance`, `grant_balance`, `sub_balance`, `tier_level`, `sub_expires_at` |
 | `api_keys` | 网关调用凭证 | `key_string`, `user_id`, `allowed_models`, `quota_limit`, `quota_used` |
 | `models` | 模型定价、模态、计费模式、倍率与并发上限 | `model_name`, `modality`, `pricing_mode`, `pricing_config`, `billing_policy`, `multiplier`, `max_concurrency` |
 | `channels` | 上游渠道配置 | `provider`, `base_url`, `api_key`, `models`, `protocol_type`, `upload_mode`, `model_mapping`, `supports_async`, `weight` |
@@ -253,7 +253,7 @@ local billing_policy = ARGV[2] or "both"
 
 当主站 (APayShop) 触发订阅续费成功时：
 
-1. 更新用户的 `tier_level` 和 `grant_expires_at`
+1. 更新用户的 `tier_level` 和 `sub_expires_at`
 2. 将 `grant_balance` **重置（覆盖）**为固定额度，绝不累加（Use it or lose it）
 3. 同步重置 Redis 中的 `grant_balance:user_id`
 4. `cash_balance`（充值余额）保持不变

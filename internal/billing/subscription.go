@@ -28,7 +28,7 @@ type SubscriptionApply struct {
 
 // ApplySubscription 原子应用订阅状态转移:
 //
-//	旧 sub_paid 剩余 → cash;覆盖写入新 sub_paid/grant/到期/等级;写 transactions + balance_logs(同事务);
+//	旧 sub 剩余 → cash;覆盖写入新 sub/grant/到期/等级;写 transactions + balance_logs(同事务);
 //	提交后失效三池 Redis 缓存(下次请求从已更新 DB 重载),避免缓存与 DB 不一致。
 //
 // 通过 transactions.event_id 唯一约束保证幂等:重复事件不会重复转移。
@@ -56,7 +56,7 @@ func ApplySubscription(ctx context.Context, pool *pgxpool.Pool, queries *db.Quer
 		return false, err
 	}
 
-	// DB 状态转移:cash += 旧 sub_paid;覆盖 sub_paid/grant/到期/等级。返回结转额(=旧 sub_paid)。
+	// DB 状态转移:cash += 旧 sub;覆盖 sub/grant/到期/等级。返回结转额(=旧 sub)。
 	movedToCash, err := qtx.ApplySubscriptionDB(ctx, p.UserID, p.NewPaid, p.NewGrant, p.ExpiresAt, pgtype.Int4{Int32: p.Tier, Valid: true})
 	if err != nil {
 		return false, err
@@ -116,7 +116,7 @@ func ApplySubscription(ctx context.Context, pool *pgxpool.Pool, queries *db.Quer
 			TransactionID:      txID,
 			UserID:             p.UserID,
 			BalanceType:        "cash",
-			ActionType:         "sub_paid_to_cash",
+			ActionType:         "sub_to_cash",
 			AmountCents:        movedToCash,
 			BeforeBalanceCents: oldCash,
 			AfterBalanceCents:  oldCash + movedToCash,
@@ -134,7 +134,7 @@ func ApplySubscription(ctx context.Context, pool *pgxpool.Pool, queries *db.Quer
 
 	// 失效三池缓存,下次请求从已更新的 DB 重载(避免覆盖/竞态)。
 	if RedisClient != nil {
-		_ = RedisClient.Del(ctx, SubPaidBalanceKey(p.UserID), GrantBalanceKey(p.UserID), CashBalanceKey(p.UserID)).Err()
+		_ = RedisClient.Del(ctx, SubBalanceKey(p.UserID), GrantBalanceKey(p.UserID), CashBalanceKey(p.UserID)).Err()
 	}
 
 	return true, nil
