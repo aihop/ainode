@@ -1074,6 +1074,7 @@ SELECT
     u.avatar_url,
     u.cash_balance,
     u.grant_balance,
+    u.sub_balance,
     u.tier_level AS user_tier,
     u.sub_expires_at,
     u.status,
@@ -1106,6 +1107,7 @@ type GetUserByAPIKeyRow struct {
 	AvatarUrl     pgtype.Text
 	CashBalance   pgtype.Int8
 	GrantBalance  pgtype.Int8
+	SubBalance    pgtype.Int8
 	UserTier      pgtype.Int4
 	SubExpiresAt  pgtype.Timestamptz
 	Status        pgtype.Int4
@@ -1134,6 +1136,7 @@ func (q *Queries) GetUserByAPIKey(ctx context.Context, keyString string) (GetUse
 		&i.AvatarUrl,
 		&i.CashBalance,
 		&i.GrantBalance,
+		&i.SubBalance,
 		&i.UserTier,
 		&i.SubExpiresAt,
 		&i.Status,
@@ -2295,7 +2298,7 @@ func (q *Queries) UpdateUserGrantBalance(ctx context.Context, arg UpdateUserGran
 	return err
 }
 
-const updateUserSubBalance = `-- name: UpdateUserSubBalance :exec
+const setSubscriptionFields = `-- name: SetSubscriptionFields :exec
 UPDATE users
 SET
     grant_balance = $2,
@@ -2305,15 +2308,15 @@ WHERE
     id = $1
 `
 
-type UpdateUserSubBalanceParams struct {
+type SetSubscriptionFieldsParams struct {
 	ID           int32
 	GrantBalance pgtype.Int8
 	SubExpiresAt pgtype.Timestamptz
 	TierLevel    pgtype.Int4
 }
 
-func (q *Queries) UpdateUserSubBalance(ctx context.Context, arg UpdateUserSubBalanceParams) error {
-	_, err := q.db.Exec(ctx, updateUserSubBalance,
+func (q *Queries) SetSubscriptionFields(ctx context.Context, arg SetSubscriptionFieldsParams) error {
+	_, err := q.db.Exec(ctx, setSubscriptionFields,
 		arg.ID,
 		arg.GrantBalance,
 		arg.SubExpiresAt,

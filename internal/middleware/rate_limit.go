@@ -65,13 +65,13 @@ func RPMAndTPMMiddleware(queries *db.Queries, maxRPM int64, maxTPM int64) func(h
 			// 退款助手函数
 			refundPreDeduction := func() {
 				preDeducted, _ := ctx.Value(reqctx.KeyPreDeductedCents).(int64)
-				subPaidDeducted, _ := ctx.Value(reqctx.KeySubPaidDeducted).(int64)
+				subDeducted, _ := ctx.Value(reqctx.KeySubDeducted).(int64)
 				grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
 				cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
 				reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
 				if preDeducted > 0 {
 					billing.Refund(context.Background(), queries, userID, preDeducted,
-						billing.Deduction{SubPaid: subPaidDeducted, Grant: grantDeducted, Cash: cashDeducted}, reqID)
+						billing.Deduction{Sub: subDeducted, Grant: grantDeducted, Cash: cashDeducted}, reqID)
 				}
 			}
 
@@ -102,7 +102,6 @@ func RPMAndTPMMiddleware(queries *db.Queries, maxRPM int64, maxTPM int64) func(h
 				utils.WriteOpenAIError(w, http.StatusTooManyRequests, "TPM limit exceeded", "rate_limit_error", "tpm_exceeded")
 				return
 			}
-
 			next.ServeHTTP(w, r)
 		})
 	}

@@ -7,6 +7,7 @@ SELECT
     u.avatar_url,
     u.cash_balance,
     u.grant_balance,
+    u.sub_balance,
     u.tier_level AS user_tier,
     u.sub_expires_at,
     u.status,
@@ -49,7 +50,7 @@ SET
 WHERE
     id = $1;
 
--- name: UpdateUserSubBalance :exec
+-- name: SetSubscriptionFields :exec
 UPDATE users
 SET
     grant_balance = $2,
