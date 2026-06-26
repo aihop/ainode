@@ -16,9 +16,9 @@ var SharedProvider = &provider.StaticProvider{
 	AuthStrategy:    provider.HeaderAuthStrategy{Header: "Authorization", Prefix: "Bearer "},
 	ErrorTranslator: provider.GenericErrorTranslator{Provider: "grok"},
 	MetaInfo: provider.ProviderMeta{
-		Name:         "grok",
-		Label:        "Grok (xAI)",
-		ProtocolType: "openai",
+		Name:           "grok",
+		Label:          "Grok (xAI)",
+		ProtocolType:   "openai",
 		DefaultBaseURL: "https://api.x.ai/v1",
 		RecommendedModels: []string{
 			"grok-4.3",

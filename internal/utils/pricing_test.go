@@ -16,7 +16,7 @@ func TestApplyMultiplier(t *testing.T) {
 		{"multiplier 1.0 keeps amount (ceil)", 137, 1.0, true, 137},
 		{"prededuct rounds up fractional", 10, 1.04, true, 11}, // 10.4 -> ceil 11
 		{"settle rounds down fractional", 10, 1.04, false, 10}, // 10.4 -> round 10
-		{"settle rounds up above half", 10, 1.06, false, 11},  // 10.6 -> round 11
+		{"settle rounds up above half", 10, 1.06, false, 11},   // 10.6 -> round 11
 		{"prededuct ceils exact-ish", 200, 1.5, true, 300},
 		{"settle on exact integer", 200, 1.5, false, 300},
 	}

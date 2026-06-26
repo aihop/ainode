@@ -1,8 +1,8 @@
 package deepseek
 
 import (
-	openaipkg "aihop.io/ainode/internal/provider/openai"
 	"aihop.io/ainode/internal/provider"
+	openaipkg "aihop.io/ainode/internal/provider/openai"
 )
 
 var SharedProvider = &provider.StaticProvider{

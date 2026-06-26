@@ -16,9 +16,9 @@ var SharedProvider = &provider.StaticProvider{
 	AuthStrategy:    provider.HeaderAuthStrategy{Header: "Authorization", Prefix: "Bearer "},
 	ErrorTranslator: provider.GenericErrorTranslator{Provider: "cohere"},
 	MetaInfo: provider.ProviderMeta{
-		Name:         "cohere",
-		Label:        "Cohere",
-		ProtocolType: "openai",
+		Name:           "cohere",
+		Label:          "Cohere",
+		ProtocolType:   "openai",
 		DefaultBaseURL: "https://api.cohere.com/v1",
 		RecommendedModels: []string{
 			"command-r-plus",

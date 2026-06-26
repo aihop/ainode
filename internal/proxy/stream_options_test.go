@@ -45,12 +45,12 @@ func TestEnsureStreamUsage_InjectsWhenStreaming(t *testing.T) {
 
 func TestEnsureStreamUsage_LeavesNonStreaming(t *testing.T) {
 	cases := map[string]string{
-		"stream false":   `{"model":"x","stream":false}`,
-		"no stream key":  `{"model":"x"}`,
-		"empty body":     ``,
-		"invalid json":   `{not json`,
-		"json array":     `[1,2,3]`,
-		"stream string":  `{"stream":"true"}`,
+		"stream false":  `{"model":"x","stream":false}`,
+		"no stream key": `{"model":"x"}`,
+		"empty body":    ``,
+		"invalid json":  `{not json`,
+		"json array":    `[1,2,3]`,
+		"stream string": `{"stream":"true"}`,
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {

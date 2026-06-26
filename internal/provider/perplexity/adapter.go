@@ -16,9 +16,9 @@ var SharedProvider = &provider.StaticProvider{
 	AuthStrategy:    provider.HeaderAuthStrategy{Header: "Authorization", Prefix: "Bearer "},
 	ErrorTranslator: provider.GenericErrorTranslator{Provider: "perplexity"},
 	MetaInfo: provider.ProviderMeta{
-		Name:         "perplexity",
-		Label:        "Perplexity",
-		ProtocolType: "openai",
+		Name:           "perplexity",
+		Label:          "Perplexity",
+		ProtocolType:   "openai",
 		DefaultBaseURL: "https://api.perplexity.ai",
 		RecommendedModels: []string{
 			"sonar-pro",

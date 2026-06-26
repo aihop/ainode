@@ -8,6 +8,7 @@ import (
 
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/reqctx"
 	"aihop.io/ainode/internal/utils"
 	"github.com/redis/go-redis/v9"
 )
@@ -44,29 +45,29 @@ func RPMAndTPMMiddleware(queries *db.Queries, maxRPM int64, maxTPM int64) func(h
 			ctx := r.Context()
 
 			// 如果不是计费路由，不限流
-			isBillingRoute, _ := ctx.Value("is_billing_route").(bool)
+			isBillingRoute, _ := ctx.Value(reqctx.KeyIsBillingRoute).(bool)
 			if !isBillingRoute {
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			userID, ok := ctx.Value("user_id").(int32)
+			userID, ok := ctx.Value(reqctx.KeyUserID).(int32)
 			if !ok {
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			estimatedTokens, ok := ctx.Value("estimated_tokens").(int64)
+			estimatedTokens, ok := ctx.Value(reqctx.KeyEstimatedTokens).(int64)
 			if !ok || estimatedTokens <= 0 {
 				estimatedTokens = 1
 			}
 
 			// 退款助手函数
 			refundPreDeduction := func() {
-				preDeducted, _ := ctx.Value("pre_deducted_cents").(int64)
-				grantDeducted, _ := ctx.Value("grant_deducted").(int64)
-				cashDeducted, _ := ctx.Value("cash_deducted").(int64)
-				reqID, _ := ctx.Value("request_id").(string)
+				preDeducted, _ := ctx.Value(reqctx.KeyPreDeductedCents).(int64)
+				grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
+				cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
+				reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
 				if preDeducted > 0 {
 					billing.Refund(context.Background(), queries, userID, preDeducted, grantDeducted, cashDeducted, reqID)
 				}

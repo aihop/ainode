@@ -13,18 +13,18 @@ import (
 )
 
 var (
-	providerCatalogOnce  sync.Once
-	providerCatalog      map[string]providerCatalogItem
-	providerCatalogPath  = "defaults.yaml"
+	providerCatalogOnce sync.Once
+	providerCatalog     map[string]providerCatalogItem
+	providerCatalogPath = "defaults.yaml"
 )
 
 type providerCatalogItem struct {
-	Label                   string                           `yaml:"label"`
-	ProtocolType            string                           `yaml:"protocol_type"`
-	DefaultBaseURL          string                           `yaml:"default_base_url"`
-	RecommendedModels       []string                         `yaml:"recommended_models"`
-	RecommendedModelPresets []providerCatalogPresetItem      `yaml:"recommended_model_presets"`
-	RecommendedModelMapping map[string]any                   `yaml:"recommended_model_mapping"`
+	Label                   string                      `yaml:"label"`
+	ProtocolType            string                      `yaml:"protocol_type"`
+	DefaultBaseURL          string                      `yaml:"default_base_url"`
+	RecommendedModels       []string                    `yaml:"recommended_models"`
+	RecommendedModelPresets []providerCatalogPresetItem `yaml:"recommended_model_presets"`
+	RecommendedModelMapping map[string]any              `yaml:"recommended_model_mapping"`
 }
 
 type providerCatalogPresetItem struct {

@@ -16,9 +16,9 @@ var SharedProvider = &provider.StaticProvider{
 	AuthStrategy:    provider.HeaderAuthStrategy{Header: "Authorization", Prefix: "Bearer "},
 	ErrorTranslator: provider.GenericErrorTranslator{Provider: "groq"},
 	MetaInfo: provider.ProviderMeta{
-		Name:         "groq",
-		Label:        "Groq (LPU Inference)",
-		ProtocolType: "openai",
+		Name:           "groq",
+		Label:          "Groq (LPU Inference)",
+		ProtocolType:   "openai",
 		DefaultBaseURL: "https://api.groq.com/openai/v1",
 		RecommendedModels: []string{
 			"llama-4-70b-8192",

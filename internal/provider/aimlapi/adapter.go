@@ -16,9 +16,9 @@ var SharedProvider = &provider.StaticProvider{
 	AuthStrategy:    provider.HeaderAuthStrategy{Header: "Authorization", Prefix: "Bearer "},
 	ErrorTranslator: provider.GenericErrorTranslator{Provider: "aimlapi"},
 	MetaInfo: provider.ProviderMeta{
-		Name:         "aimlapi",
-		Label:        "AI/ML API",
-		ProtocolType: "openai",
+		Name:           "aimlapi",
+		Label:          "AI/ML API",
+		ProtocolType:   "openai",
 		DefaultBaseURL: "https://api.aimlapi.com/v1",
 		RecommendedModels: []string{
 			"gpt-5.5",

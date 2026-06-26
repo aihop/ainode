@@ -16,9 +16,9 @@ var SharedProvider = &provider.StaticProvider{
 	AuthStrategy:    provider.HeaderAuthStrategy{Header: "Authorization", Prefix: "Bearer "},
 	ErrorTranslator: provider.GenericErrorTranslator{Provider: "mistral"},
 	MetaInfo: provider.ProviderMeta{
-		Name:         "mistral",
-		Label:        "Mistral AI",
-		ProtocolType: "openai",
+		Name:           "mistral",
+		Label:          "Mistral AI",
+		ProtocolType:   "openai",
 		DefaultBaseURL: "https://api.mistral.ai/v1",
 		RecommendedModels: []string{
 			"mistral-large-latest",

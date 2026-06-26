@@ -20,6 +20,7 @@ import (
 	"aihop.io/ainode/internal/db"
 	"aihop.io/ainode/internal/metrics"
 	"aihop.io/ainode/internal/provider"
+	"aihop.io/ainode/internal/reqctx"
 	"aihop.io/ainode/internal/utils"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -79,25 +80,25 @@ func logModelFailure(ctx context.Context, queries *db.Queries, statusCode int, r
 		return
 	}
 
-	userID, ok := ctx.Value("user_id").(int32)
+	userID, ok := ctx.Value(reqctx.KeyUserID).(int32)
 	if !ok || userID <= 0 {
 		return
 	}
 
-	modelName, _ := ctx.Value("public_model_name").(string)
+	modelName, _ := ctx.Value(reqctx.KeyPublicModelName).(string)
 	if modelName == "" {
-		modelName, _ = ctx.Value("model_name").(string)
+		modelName, _ = ctx.Value(reqctx.KeyModelName).(string)
 	}
 	if modelName == "" {
 		return
 	}
 
-	requestID, _ := ctx.Value("request_id").(string)
-	providerName, _ := ctx.Value("current_provider").(string)
-	apiKeyID, _ := ctx.Value("api_key_id").(int32)
+	requestID, _ := ctx.Value(reqctx.KeyRequestID).(string)
+	providerName, _ := ctx.Value(reqctx.KeyCurrentProvider).(string)
+	apiKeyID, _ := ctx.Value(reqctx.KeyAPIKeyID).(int32)
 
 	latencyMs := int32(0)
-	if startedAt, ok := ctx.Value("request_start_time").(time.Time); ok {
+	if startedAt, ok := ctx.Value(reqctx.KeyRequestStartTime).(time.Time); ok {
 		latencyMs = int32(time.Since(startedAt).Milliseconds())
 	}
 
@@ -134,14 +135,14 @@ func (t *FallbackTransport) logChannelFailure(req *http.Request, ch *db.Channel,
 	}
 
 	ctx := context.Background()
-	requestID, _ := req.Context().Value("request_id").(string)
-	modelName, _ := req.Context().Value("public_model_name").(string)
+	requestID, _ := req.Context().Value(reqctx.KeyRequestID).(string)
+	modelName, _ := req.Context().Value(reqctx.KeyPublicModelName).(string)
 	if modelName == "" {
-		modelName, _ = req.Context().Value("model_name").(string)
+		modelName, _ = req.Context().Value(reqctx.KeyModelName).(string)
 	}
 
 	latencyMs := int32(0)
-	if startedAt, ok := req.Context().Value("request_start_time").(time.Time); ok {
+	if startedAt, ok := req.Context().Value(reqctx.KeyRequestStartTime).(time.Time); ok {
 		latencyMs = int32(time.Since(startedAt).Milliseconds())
 	}
 
@@ -198,15 +199,15 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		}
 
 		// 判断是否是计费路由，以及具体的请求类型
-		isBillingRoute, _ := req.Context().Value("is_billing_route").(bool)
-		requestType, _ := req.Context().Value("request_type").(string)
+		isBillingRoute, _ := req.Context().Value(reqctx.KeyIsBillingRoute).(bool)
+		requestType, _ := req.Context().Value(reqctx.KeyRequestType).(string)
 
 		var publicModelName string
 		if isBillingRoute {
 			// 获取请求中指定的模型
-			publicModelName, _ = req.Context().Value("public_model_name").(string)
+			publicModelName, _ = req.Context().Value(reqctx.KeyPublicModelName).(string)
 			if publicModelName == "" {
-				publicModelName, _ = req.Context().Value("model_name").(string)
+				publicModelName, _ = req.Context().Value(reqctx.KeyModelName).(string)
 			}
 		} else {
 			// 非计费路由 (如 /v1/models)，不需要模型精确路由，传空字符串
@@ -276,9 +277,9 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		}
 
 		// 将当前选中的 channel ID 和 Provider 注入到请求的 Context 中
-		ctx := context.WithValue(req.Context(), "current_channel_id", ch.ID)
-		ctx = context.WithValue(ctx, "current_provider", ch.Provider)
-		ctx = context.WithValue(ctx, "upstream_model_name", upstreamModelName)
+		ctx := context.WithValue(req.Context(), reqctx.KeyCurrentChannelID, ch.ID)
+		ctx = context.WithValue(ctx, reqctx.KeyCurrentProvider, ch.Provider)
+		ctx = context.WithValue(ctx, reqctx.KeyUpstreamModelName, upstreamModelName)
 		req = req.WithContext(ctx)
 
 		// 发起实际请求
@@ -349,34 +350,34 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 	modifyResponse := func(resp *http.Response) error {
 		ctx := resp.Request.Context()
 
-		isBillingRoute, _ := ctx.Value("is_billing_route").(bool)
+		isBillingRoute, _ := ctx.Value(reqctx.KeyIsBillingRoute).(bool)
 		if !isBillingRoute {
 			// 非计费接口直接透传返回，不需要结算和拦截
 			return nil
 		}
 
 		// 从上下文中提取必要的信息用于结算 (这些通常在进入 Proxy 前的中间件中解析并塞入)
-		userID, _ := ctx.Value("user_id").(int32)
-		apiKeyID, _ := ctx.Value("api_key_id").(int32)
-		channelID, _ := ctx.Value("current_channel_id").(int32)
-		publicModelName, _ := ctx.Value("public_model_name").(string)
+		userID, _ := ctx.Value(reqctx.KeyUserID).(int32)
+		apiKeyID, _ := ctx.Value(reqctx.KeyAPIKeyID).(int32)
+		channelID, _ := ctx.Value(reqctx.KeyCurrentChannelID).(int32)
+		publicModelName, _ := ctx.Value(reqctx.KeyPublicModelName).(string)
 		if publicModelName == "" {
-			publicModelName, _ = ctx.Value("model_name").(string)
+			publicModelName, _ = ctx.Value(reqctx.KeyModelName).(string)
 		}
-		upstreamModelName, _ := ctx.Value("upstream_model_name").(string)
-		reqID, _ := ctx.Value("request_id").(string)
-		preDeductedCents, _ := ctx.Value("pre_deducted_cents").(int64)
-		grantDeducted, _ := ctx.Value("grant_deducted").(int64)
-		cashDeducted, _ := ctx.Value("cash_deducted").(int64)
-		promptTokens, _ := ctx.Value("prompt_tokens").(int)
-		requestType, _ := ctx.Value("request_type").(string)
-		billingUnits, _ := ctx.Value("billing_units").(int64)
+		upstreamModelName, _ := ctx.Value(reqctx.KeyUpstreamModelName).(string)
+		reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
+		preDeductedCents, _ := ctx.Value(reqctx.KeyPreDeductedCents).(int64)
+		grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
+		cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
+		promptTokens, _ := ctx.Value(reqctx.KeyPromptTokens).(int)
+		requestType, _ := ctx.Value(reqctx.KeyRequestType).(string)
+		billingUnits, _ := ctx.Value(reqctx.KeyBillingUnits).(int64)
 
 		if resp.StatusCode != http.StatusOK {
 			rawBody, readErr := io.ReadAll(resp.Body)
 			if readErr == nil {
 				resp.Body.Close()
-				providerName, _ := ctx.Value("current_provider").(string)
+				providerName, _ := ctx.Value(reqctx.KeyCurrentProvider).(string)
 				driver := provider.GetProvider(providerName)
 				var translated *provider.ProviderError
 				if driver != nil && driver.Errors() != nil {
@@ -429,7 +430,7 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 
 		onComplete := func(pTokens, cTokens, cacheHitTokens, cacheMissTokens int) {
 			// 监控埋点：记录成功请求、耗时及 Token 消耗
-			if startTimeObj, ok := ctx.Value("request_start_time").(time.Time); ok {
+			if startTimeObj, ok := ctx.Value(reqctx.KeyRequestStartTime).(time.Time); ok {
 				duration := time.Since(startTimeObj).Seconds()
 				metrics.GatewayRequestDuration.WithLabelValues(publicModelName, strconv.Itoa(int(channelID))).Observe(duration)
 			}
@@ -487,7 +488,7 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 
 		if isStream {
 			// 从上下文获取 provider
-			provider, _ := ctx.Value("current_provider").(string)
+			provider, _ := ctx.Value(reqctx.KeyCurrentProvider).(string)
 			// 挂载 TallyReader 拦截器
 			tokenizerModelName := upstreamModelName
 			if tokenizerModelName == "" {
@@ -565,24 +566,24 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 
 			// 在代理发生错误（比如重试所有渠道都失败）时，退还预扣费
 			ctx := r.Context()
-			isBillingRoute, _ := ctx.Value("is_billing_route").(bool)
+			isBillingRoute, _ := ctx.Value(reqctx.KeyIsBillingRoute).(bool)
 			if isBillingRoute {
-				userID, _ := ctx.Value("user_id").(int32)
-				preDeductedCents, _ := ctx.Value("pre_deducted_cents").(int64)
-				grantDeducted, _ := ctx.Value("grant_deducted").(int64)
-				cashDeducted, _ := ctx.Value("cash_deducted").(int64)
-				reqID, _ := ctx.Value("request_id").(string)
+				userID, _ := ctx.Value(reqctx.KeyUserID).(int32)
+				preDeductedCents, _ := ctx.Value(reqctx.KeyPreDeductedCents).(int64)
+				grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
+				cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
+				reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
 				if preDeductedCents > 0 {
 					billing.Refund(context.Background(), queries, userID, preDeductedCents, grantDeducted, cashDeducted, reqID)
 				}
 			}
 
 			// 记录网关层面的错误 (502 Bad Gateway)
-			modelName, _ := ctx.Value("public_model_name").(string)
+			modelName, _ := ctx.Value(reqctx.KeyPublicModelName).(string)
 			if modelName == "" {
-				modelName, _ = ctx.Value("model_name").(string)
+				modelName, _ = ctx.Value(reqctx.KeyModelName).(string)
 			}
-			channelID, _ := ctx.Value("current_channel_id").(int32)
+			channelID, _ := ctx.Value(reqctx.KeyCurrentChannelID).(int32)
 			if modelName != "" {
 				metrics.GatewayRequestTotal.WithLabelValues(modelName, strconv.Itoa(int(channelID)), "502").Inc()
 			}

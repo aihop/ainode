@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"aihop.io/ainode/internal/media"
-	openaipkg "aihop.io/ainode/internal/provider/openai"
 	"aihop.io/ainode/internal/provider"
+	openaipkg "aihop.io/ainode/internal/provider/openai"
 )
 
 type Adapter struct{}

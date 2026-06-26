@@ -16,9 +16,9 @@ var SharedProvider = &provider.StaticProvider{
 	AuthStrategy:    provider.HeaderAuthStrategy{Header: "Authorization", Prefix: "Bearer "},
 	ErrorTranslator: provider.GenericErrorTranslator{Provider: "fireworks"},
 	MetaInfo: provider.ProviderMeta{
-		Name:         "fireworks",
-		Label:        "Fireworks AI",
-		ProtocolType: "openai",
+		Name:           "fireworks",
+		Label:          "Fireworks AI",
+		ProtocolType:   "openai",
 		DefaultBaseURL: "https://api.fireworks.ai/inference/v1",
 		RecommendedModels: []string{
 			"accounts/fireworks/models/llama4-70b-instruct",

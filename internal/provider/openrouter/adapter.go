@@ -16,9 +16,9 @@ var SharedProvider = &provider.StaticProvider{
 	AuthStrategy:    provider.HeaderAuthStrategy{Header: "Authorization", Prefix: "Bearer "},
 	ErrorTranslator: provider.GenericErrorTranslator{Provider: "openrouter"},
 	MetaInfo: provider.ProviderMeta{
-		Name:         "openrouter",
-		Label:        "OpenRouter",
-		ProtocolType: "openai",
+		Name:           "openrouter",
+		Label:          "OpenRouter",
+		ProtocolType:   "openai",
 		DefaultBaseURL: "https://openrouter.ai/api/v1",
 		RecommendedModels: []string{
 			"openai/gpt-5.5",

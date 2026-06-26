@@ -23,17 +23,17 @@ type ProviderCapabilities struct {
 }
 
 type ProviderMeta struct {
-	Name                    string                         `json:"name"`
-	Label                   string                         `json:"label"`
-	ProtocolType            string                         `json:"protocol_type"`
-	DefaultBaseURL          string                         `json:"default_base_url"`
-	RecommendedModels       []string                       `json:"recommended_models"`
+	Name                    string                           `json:"name"`
+	Label                   string                           `json:"label"`
+	ProtocolType            string                           `json:"protocol_type"`
+	DefaultBaseURL          string                           `json:"default_base_url"`
+	RecommendedModels       []string                         `json:"recommended_models"`
 	RecommendedModelPresets []ProviderRecommendedModelPreset `json:"recommended_model_presets"`
-	RecommendedModelMapping map[string]any                 `json:"recommended_model_mapping"`
-	Capabilities            ProviderCapabilities           `json:"capabilities"`
-	SupportsAsync           bool                           `json:"supports_async"`
-	AuthHeader              string                         `json:"auth_header"`
-	AuthPrefix              string                         `json:"auth_prefix"`
+	RecommendedModelMapping map[string]any                   `json:"recommended_model_mapping"`
+	Capabilities            ProviderCapabilities             `json:"capabilities"`
+	SupportsAsync           bool                             `json:"supports_async"`
+	AuthHeader              string                           `json:"auth_header"`
+	AuthPrefix              string                           `json:"auth_prefix"`
 }
 
 type ProviderRecommendedModelPreset struct {

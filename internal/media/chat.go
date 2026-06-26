@@ -21,8 +21,8 @@ const (
 	ContentTypeImageURL   = "image_url"
 	ContentTypeInputImage = "input_image"
 
-	MaxRemoteMediaBytes   int64 = 20 * 1024 * 1024
-	EstimatedImageTokens        = 1024
+	MaxRemoteMediaBytes  int64 = 20 * 1024 * 1024
+	EstimatedImageTokens       = 1024
 )
 
 type ChatCompletionRequest struct {

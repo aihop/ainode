@@ -16,9 +16,9 @@ var SharedProvider = &provider.StaticProvider{
 	AuthStrategy:    provider.HeaderAuthStrategy{Header: "Authorization", Prefix: "Bearer "},
 	ErrorTranslator: provider.GenericErrorTranslator{Provider: "deepinfra"},
 	MetaInfo: provider.ProviderMeta{
-		Name:         "deepinfra",
-		Label:        "DeepInfra",
-		ProtocolType: "openai",
+		Name:           "deepinfra",
+		Label:          "DeepInfra",
+		ProtocolType:   "openai",
 		DefaultBaseURL: "https://api.deepinfra.com/v1/openai",
 		RecommendedModels: []string{
 			"meta-llama/Llama-4-70B-Instruct",

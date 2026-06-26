@@ -7,7 +7,7 @@ import (
 func (h *InternalHandler) ListModelGroupsHandler(w http.ResponseWriter, r *http.Request) {
 	// 由于移除了 Go 特有的 models 表以避免领域污染，
 	// 我们直接在代码中返回硬编码的推荐模型列表给前端展示
-	
+
 	groups := []map[string]interface{}{
 		{
 			"id":    "openai",

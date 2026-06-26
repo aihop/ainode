@@ -22,18 +22,18 @@ func (h *AdminHandler) ListModels(w http.ResponseWriter, r *http.Request) {
 // CreateModel
 func (h *AdminHandler) CreateModel(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ModelName           string  `json:"model_name"`
-		InputPriceCents     int64   `json:"input_price_cents"`
-		OutputPriceCents    int64   `json:"output_price_cents"`
-		CacheHitPriceCents  int64   `json:"cache_hit_price_cents"`
-		CacheMissPriceCents int64   `json:"cache_miss_price_cents"`
-		Multiplier          float32 `json:"multiplier"`
-		BillingPolicy       string  `json:"billing_policy"`
-		Modality            string  `json:"modality"`
-		PricingMode         string  `json:"pricing_mode"`
+		ModelName           string          `json:"model_name"`
+		InputPriceCents     int64           `json:"input_price_cents"`
+		OutputPriceCents    int64           `json:"output_price_cents"`
+		CacheHitPriceCents  int64           `json:"cache_hit_price_cents"`
+		CacheMissPriceCents int64           `json:"cache_miss_price_cents"`
+		Multiplier          float32         `json:"multiplier"`
+		BillingPolicy       string          `json:"billing_policy"`
+		Modality            string          `json:"modality"`
+		PricingMode         string          `json:"pricing_mode"`
 		PricingConfig       json.RawMessage `json:"pricing_config"`
-		MaxConcurrency      int32   `json:"max_concurrency"`
-		Status              int32   `json:"status"`
+		MaxConcurrency      int32           `json:"max_concurrency"`
+		Status              int32           `json:"status"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		errorResponse(w, http.StatusBadRequest, "Invalid request body")
@@ -81,17 +81,17 @@ func (h *AdminHandler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		InputPriceCents     int64   `json:"input_price_cents"`
-		OutputPriceCents    int64   `json:"output_price_cents"`
-		CacheHitPriceCents  int64   `json:"cache_hit_price_cents"`
-		CacheMissPriceCents int64   `json:"cache_miss_price_cents"`
-		Multiplier          float32 `json:"multiplier"`
-		BillingPolicy       string  `json:"billing_policy"`
-		Modality            string  `json:"modality"`
-		PricingMode         string  `json:"pricing_mode"`
+		InputPriceCents     int64           `json:"input_price_cents"`
+		OutputPriceCents    int64           `json:"output_price_cents"`
+		CacheHitPriceCents  int64           `json:"cache_hit_price_cents"`
+		CacheMissPriceCents int64           `json:"cache_miss_price_cents"`
+		Multiplier          float32         `json:"multiplier"`
+		BillingPolicy       string          `json:"billing_policy"`
+		Modality            string          `json:"modality"`
+		PricingMode         string          `json:"pricing_mode"`
 		PricingConfig       json.RawMessage `json:"pricing_config"`
-		MaxConcurrency      int32   `json:"max_concurrency"`
-		Status              int32   `json:"status"`
+		MaxConcurrency      int32           `json:"max_concurrency"`
+		Status              int32           `json:"status"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		errorResponse(w, http.StatusBadRequest, "Invalid request body")

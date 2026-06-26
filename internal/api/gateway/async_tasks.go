@@ -12,6 +12,7 @@ import (
 	"aihop.io/ainode/internal/db"
 	"aihop.io/ainode/internal/media"
 	"aihop.io/ainode/internal/provider"
+	"aihop.io/ainode/internal/reqctx"
 	"aihop.io/ainode/internal/utils"
 
 	"github.com/go-chi/chi/v5"
@@ -31,7 +32,7 @@ func NewGatewayHandler(queries *db.Queries) *GatewayHandler {
 func (h *GatewayHandler) CreateVideoGenerationTask(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	userID, ok := ctx.Value("user_id").(int32)
+	userID, ok := ctx.Value(reqctx.KeyUserID).(int32)
 	if !ok {
 		utils.WriteOpenAIError(w, http.StatusUnauthorized, "Invalid API Key", "invalid_request_error", "invalid_api_key")
 		return
@@ -50,10 +51,10 @@ func (h *GatewayHandler) CreateVideoGenerationTask(w http.ResponseWriter, r *htt
 		return
 	}
 
-	preDeducted, _ := ctx.Value("pre_deducted_cents").(int64)
-	grantDeducted, _ := ctx.Value("grant_deducted").(int64)
-	cashDeducted, _ := ctx.Value("cash_deducted").(int64)
-	requestID, _ := ctx.Value("request_id").(string)
+	preDeducted, _ := ctx.Value(reqctx.KeyPreDeductedCents).(int64)
+	grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
+	cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
+	requestID, _ := ctx.Value(reqctx.KeyRequestID).(string)
 	if requestID == "" {
 		requestID = uuid.NewString()
 	}
@@ -149,7 +150,7 @@ func (h *GatewayHandler) CreateVideoGenerationTask(w http.ResponseWriter, r *htt
 
 func (h *GatewayHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID, ok := ctx.Value("user_id").(int32)
+	userID, ok := ctx.Value(reqctx.KeyUserID).(int32)
 	if !ok {
 		utils.WriteOpenAIError(w, http.StatusUnauthorized, "Invalid API Key", "invalid_request_error", "invalid_api_key")
 		return
@@ -180,7 +181,7 @@ func (h *GatewayHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 
 func (h *GatewayHandler) CancelTask(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID, ok := ctx.Value("user_id").(int32)
+	userID, ok := ctx.Value(reqctx.KeyUserID).(int32)
 	if !ok {
 		utils.WriteOpenAIError(w, http.StatusUnauthorized, "Invalid API Key", "invalid_request_error", "invalid_api_key")
 		return

@@ -18,9 +18,9 @@ type AsyncAdapter struct{}
 var (
 	SharedAsyncAdapter = &AsyncAdapter{}
 	SharedProvider     = &provider.StaticProvider{
-		ProviderName:    "openai",
-		RequestAdapter:  SharedRequestAdapter,
-		AsyncAdapter:    SharedAsyncAdapter,
+		ProviderName:   "openai",
+		RequestAdapter: SharedRequestAdapter,
+		AsyncAdapter:   SharedAsyncAdapter,
 		CapabilitySet: provider.ProviderCapabilities{
 			Chat:       true,
 			Stream:     true,

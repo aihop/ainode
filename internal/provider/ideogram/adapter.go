@@ -17,9 +17,9 @@ var SharedProvider = &provider.StaticProvider{
 	AuthStrategy:    provider.HeaderAuthStrategy{Header: "Authorization", Prefix: "Bearer "},
 	ErrorTranslator: provider.GenericErrorTranslator{Provider: "ideogram"},
 	MetaInfo: provider.ProviderMeta{
-		Name:         "ideogram",
-		Label:        "Ideogram",
-		ProtocolType: "openai",
+		Name:           "ideogram",
+		Label:          "Ideogram",
+		ProtocolType:   "openai",
 		DefaultBaseURL: "https://api.ideogram.ai",
 		RecommendedModels: []string{
 			"ideogram-4.0",

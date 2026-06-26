@@ -14,6 +14,7 @@ import (
 	"aihop.io/ainode/internal/config"
 	"aihop.io/ainode/internal/db"
 	"aihop.io/ainode/internal/media"
+	"aihop.io/ainode/internal/reqctx"
 	"aihop.io/ainode/internal/utils"
 
 	"github.com/google/uuid"
@@ -26,7 +27,7 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-			ctx = context.WithValue(ctx, "request_start_time", time.Now())
+			ctx = context.WithValue(ctx, reqctx.KeyRequestStartTime, time.Now())
 
 			// 1. 提取并校验 API Key
 			authHeader := r.Header.Get("Authorization")
@@ -41,8 +42,8 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 				utils.WriteOpenAIError(w, http.StatusUnauthorized, "Invalid API Key", "invalid_request_error", "invalid_api_key")
 				return
 			}
-			ctx = context.WithValue(ctx, "user_id", user.ID)
-			ctx = context.WithValue(ctx, "api_key_id", user.KeyID)
+			ctx = context.WithValue(ctx, reqctx.KeyUserID, user.ID)
+			ctx = context.WithValue(ctx, reqctx.KeyAPIKeyID, user.KeyID)
 
 			// 如果不是主要的计费接口（比如 /v1/models 或 /v1/dashboard），直接放行
 			// 我们主要拦截会产生大量消耗的生成接口
@@ -52,12 +53,12 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			isBillingRoute := isChatRoute || isImageRoute || isVideoRoute
 			if !isBillingRoute {
 				// 标记为非计费请求，跳过预扣费，直接走到限流和代理
-				ctx = context.WithValue(ctx, "is_billing_route", false)
+				ctx = context.WithValue(ctx, reqctx.KeyIsBillingRoute, false)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
-			ctx = context.WithValue(ctx, "is_billing_route", true)
+			ctx = context.WithValue(ctx, reqctx.KeyIsBillingRoute, true)
 
 			// 2. 解析请求体以获取 Model 和 Prompt
 			var (
@@ -203,17 +204,17 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			reqID := uuid.New().String()
 
 			// 6. 将核心数据注入 Context 供后续中间件 (限流) 和 Proxy 结算使用
-			ctx = context.WithValue(ctx, "model_name", modelName)
-			ctx = context.WithValue(ctx, "public_model_name", modelName)
-			ctx = context.WithValue(ctx, "upstream_model_name", modelName)
-			ctx = context.WithValue(ctx, "request_type", requestType)
-			ctx = context.WithValue(ctx, "prompt_tokens", promptTokens)
-			ctx = context.WithValue(ctx, "pre_deducted_cents", estimatedCostCents)
-			ctx = context.WithValue(ctx, "grant_deducted", grantDeducted)
-			ctx = context.WithValue(ctx, "cash_deducted", cashDeducted)
-			ctx = context.WithValue(ctx, "billing_units", billingUnits)
-			ctx = context.WithValue(ctx, "estimated_tokens", int64(promptTokens+maxOutputTokens)) // 给 TPM 限流用
-			ctx = context.WithValue(ctx, "request_id", reqID)
+			ctx = context.WithValue(ctx, reqctx.KeyModelName, modelName)
+			ctx = context.WithValue(ctx, reqctx.KeyPublicModelName, modelName)
+			ctx = context.WithValue(ctx, reqctx.KeyUpstreamModelName, modelName)
+			ctx = context.WithValue(ctx, reqctx.KeyRequestType, requestType)
+			ctx = context.WithValue(ctx, reqctx.KeyPromptTokens, promptTokens)
+			ctx = context.WithValue(ctx, reqctx.KeyPreDeductedCents, estimatedCostCents)
+			ctx = context.WithValue(ctx, reqctx.KeyGrantDeducted, grantDeducted)
+			ctx = context.WithValue(ctx, reqctx.KeyCashDeducted, cashDeducted)
+			ctx = context.WithValue(ctx, reqctx.KeyBillingUnits, billingUnits)
+			ctx = context.WithValue(ctx, reqctx.KeyEstimatedTokens, int64(promptTokens+maxOutputTokens)) // 给 TPM 限流用
+			ctx = context.WithValue(ctx, reqctx.KeyRequestID, reqID)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -255,15 +256,15 @@ func logMiddlewareFailure(queries *db.Queries, ctx context.Context, statusCode i
 		return
 	}
 
-	userID, _ := ctx.Value("user_id").(int32)
+	userID, _ := ctx.Value(reqctx.KeyUserID).(int32)
 	if userID <= 0 {
 		return
 	}
 
-	apiKeyID, _ := ctx.Value("api_key_id").(int32)
+	apiKeyID, _ := ctx.Value(reqctx.KeyAPIKeyID).(int32)
 
 	latencyMs := int32(0)
-	if startedAt, ok := ctx.Value("request_start_time").(time.Time); ok {
+	if startedAt, ok := ctx.Value(reqctx.KeyRequestStartTime).(time.Time); ok {
 		latencyMs = int32(time.Since(startedAt).Milliseconds())
 	}
 

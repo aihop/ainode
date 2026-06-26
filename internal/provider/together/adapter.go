@@ -16,9 +16,9 @@ var SharedProvider = &provider.StaticProvider{
 	AuthStrategy:    provider.HeaderAuthStrategy{Header: "Authorization", Prefix: "Bearer "},
 	ErrorTranslator: provider.GenericErrorTranslator{Provider: "together"},
 	MetaInfo: provider.ProviderMeta{
-		Name:         "together",
-		Label:        "Together AI",
-		ProtocolType: "openai",
+		Name:           "together",
+		Label:          "Together AI",
+		ProtocolType:   "openai",
 		DefaultBaseURL: "https://api.together.xyz/v1",
 		RecommendedModels: []string{
 			"meta-llama/Llama-4-70B-Instruct",
