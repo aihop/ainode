@@ -257,3 +257,16 @@ CREATE INDEX IF NOT EXISTS idx_model_failure_logs_user_created_at ON model_failu
 CREATE INDEX IF NOT EXISTS idx_model_failure_logs_user_model_created_at ON model_failure_logs (user_id, model_name, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_model_failure_logs_request_id ON model_failure_logs (request_id);
+
+-- settlement_outbox：结算任务无法投递到 asynq（如 Redis 故障）时的持久化兜底，
+-- 由后台 relay 定时重投，保证“Redis 已扣费但账单不丢”。
+CREATE TABLE IF NOT EXISTS settlement_outbox (
+    id BIGSERIAL PRIMARY KEY,
+    request_id VARCHAR(100) NOT NULL UNIQUE,
+    payload JSONB NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    processed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_settlement_outbox_pending ON settlement_outbox (created_at) WHERE processed_at IS NULL;

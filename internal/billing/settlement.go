@@ -114,7 +114,17 @@ func Settle(ctx context.Context, queries *db.Queries, req SettlementRequest) err
 	// 将任务推送到 asynq 队列，指定队列名称，避免与其他项目冲突
 	info, err := AsynqClient.EnqueueContext(ctx, task, asynq.Queue("ainode_billing"), asynq.MaxRetry(5))
 	if err != nil {
-		log.Printf("ERROR: Failed to enqueue billing task: %v", err)
+		// asynq（依赖 Redis）投递失败时，落入 Postgres outbox 兜底，由后台 relay 重投，
+		// 避免“Redis 已扣费但账单永久丢失”。需要 request_id 才能去重/重投。
+		if queries != nil && req.RequestID != "" {
+			if oerr := queries.InsertSettlementOutbox(ctx, req.RequestID, payload); oerr != nil {
+				log.Printf("CRITICAL: enqueue failed AND outbox persist failed for request %s: enqueue=%v outbox=%v", req.RequestID, err, oerr)
+				return oerr
+			}
+			log.Printf("WARN: enqueue billing task failed (%v), persisted settlement %s to outbox for later delivery", err, req.RequestID)
+			return nil
+		}
+		log.Printf("ERROR: Failed to enqueue billing task and cannot fall back to outbox (request_id empty): %v", err)
 		return err
 	}
 

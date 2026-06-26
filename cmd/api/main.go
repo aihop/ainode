@@ -100,6 +100,9 @@ func main() {
 	// 启动分区定时维护任务 (每天检查并创建未来月份的分区)
 	billing.StartPartitionMaintenance(syncCtx, pool)
 
+	// 启动结算 outbox relay：兜底重投因 asynq/Redis 故障而落库的结算，确保账单不丢
+	billing.StartOutboxRelay(syncCtx, queries)
+
 	// 5. 初始化并启动 Asynq Worker (后台任务消费者)
 	srvAsynq := asynq.NewServer(
 		asynq.RedisClientOpt{
