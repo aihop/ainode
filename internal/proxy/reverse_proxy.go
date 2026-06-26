@@ -327,17 +327,23 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 		// 这里只做一些基础的头部清理
 		req.Header.Del("X-Forwarded-For")
 
-		// 为了精准计费，我们需要告诉上游流式返回时带上 usage 统计 (OpenAI format)
-		if reqBodyBytes, err := io.ReadAll(req.Body); err == nil {
-			bodyStr := string(reqBodyBytes)
-			if strings.Contains(bodyStr, `"stream":true`) || strings.Contains(bodyStr, `"stream": true`) {
-				if !strings.Contains(bodyStr, `"stream_options"`) {
-					// 注入 stream_options: {"include_usage": true} (简化版，实际应用建议用 json.Unmarshal 处理)
-					// 这里仅作为提示，实际的修改需要完整的 JSON 解析和重组
-				}
-			}
-			req.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
+		if req.Body == nil {
+			return
 		}
+
+		// 为了精准计费，给流式请求注入 stream_options.include_usage=true，
+		// 让 OpenAI 兼容上游在流末尾返回真实 usage，避免回退到 tiktoken 估算。
+		reqBodyBytes, err := io.ReadAll(req.Body)
+		req.Body.Close()
+		if err != nil {
+			return
+		}
+		reqBodyBytes = ensureStreamUsage(reqBodyBytes)
+		req.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
+		// body 长度可能已变化，必须同步 ContentLength；删除手写的 Content-Length 头，
+		// 交由 Transport 依据 ContentLength 重新写入，避免长度不一致。
+		req.ContentLength = int64(len(reqBodyBytes))
+		req.Header.Del("Content-Length")
 	}
 
 	modifyResponse := func(resp *http.Response) error {
