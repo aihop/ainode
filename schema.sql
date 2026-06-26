@@ -54,6 +54,9 @@ CREATE TABLE IF NOT EXISTS models (
     cache_miss_price_cents BIGINT NOT NULL DEFAULT 0, -- 每 1M Token 的缓存创建价格
     multiplier REAL NOT NULL DEFAULT 1.0, -- 用户端计费倍率 (如 0.60x 表示打6折)
     billing_policy VARCHAR(20) NOT NULL DEFAULT 'both', -- both | cash_only | grant_only
+    modality VARCHAR(20) NOT NULL DEFAULT 'text', -- text | vision | image | video | audio
+    pricing_mode VARCHAR(20) NOT NULL DEFAULT 'token', -- token | request
+    pricing_config JSONB NOT NULL DEFAULT '{}'::jsonb, -- 请求计费等扩展配置
     max_concurrency INT NOT NULL DEFAULT 0, -- 模型级并发限制，0 表示不限制
     status INT DEFAULT 1
 );
@@ -64,6 +67,15 @@ ADD COLUMN IF NOT EXISTS max_concurrency INT NOT NULL DEFAULT 0;
 ALTER TABLE models
 ADD COLUMN IF NOT EXISTS billing_policy VARCHAR(20) NOT NULL DEFAULT 'both';
 
+ALTER TABLE models
+ADD COLUMN IF NOT EXISTS modality VARCHAR(20) NOT NULL DEFAULT 'text';
+
+ALTER TABLE models
+ADD COLUMN IF NOT EXISTS pricing_mode VARCHAR(20) NOT NULL DEFAULT 'token';
+
+ALTER TABLE models
+ADD COLUMN IF NOT EXISTS pricing_config JSONB NOT NULL DEFAULT '{}'::jsonb;
+
 -- 上游渠道池表（高可用配置）
 CREATE TABLE IF NOT EXISTS channels (
     id SERIAL PRIMARY KEY,
@@ -72,9 +84,25 @@ CREATE TABLE IF NOT EXISTS channels (
     base_url VARCHAR(255) NOT NULL,
     api_key VARCHAR(255) NOT NULL,
     models TEXT NOT NULL DEFAULT '', -- 逗号分隔的支持模型列表 (如 "gpt-4,gpt-3.5-turbo")
+    protocol_type VARCHAR(20) NOT NULL DEFAULT 'openai', -- openai | anthropic | gemini | custom
+    upload_mode VARCHAR(20) NOT NULL DEFAULT 'url', -- url | base64 | multipart | file_id
+    model_mapping JSONB NOT NULL DEFAULT '{}'::jsonb, -- 上游模型映射配置
+    supports_async BOOLEAN NOT NULL DEFAULT FALSE, -- 是否支持异步任务接口
     weight INT DEFAULT 1, -- 负载均衡权重
     status INT DEFAULT 1 -- 1: 正常, 0: 故障/禁用
 );
+
+ALTER TABLE channels
+ADD COLUMN IF NOT EXISTS protocol_type VARCHAR(20) NOT NULL DEFAULT 'openai';
+
+ALTER TABLE channels
+ADD COLUMN IF NOT EXISTS upload_mode VARCHAR(20) NOT NULL DEFAULT 'url';
+
+ALTER TABLE channels
+ADD COLUMN IF NOT EXISTS model_mapping JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE channels
+ADD COLUMN IF NOT EXISTS supports_async BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- 计费流水表
 -- 修改 billing_logs 为按月分区表

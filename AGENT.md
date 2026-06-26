@@ -2,6 +2,7 @@
 
 > **变更日志 (Changelog)**
 > `2026-06-26`: 新增多模态网关演进约定，统一媒体输入抽象与图生视频异步任务设计边界，见 Section 4.6。
+> `2026-06-26`: 扩展 models/channels 多模态元数据字段，并引入 request 计费模式与图像生成入口约定，见 Section 3 与 Section 4.6。
 
 ## 1. 项目定位与核心架构
 
@@ -95,8 +96,8 @@ AI 请严格按照以下结构组织代码：
 |------|------|---------|
 | `users` | 用户余额与订阅等级 | `cash_balance`, `grant_balance`, `tier_level`, `grant_expires_at` |
 | `api_keys` | 网关调用凭证 | `key_string`, `user_id`, `allowed_models`, `quota_limit` |
-| `models` | 模型定价、余额策略、倍率与并发上限 | `model_name`, `input_price_cents`, `output_price_cents`, `billing_policy`, `multiplier`, `max_concurrency` |
-| `channels` | 上游渠道配置 | `provider`, `base_url`, `api_key`, `models`, `weight` |
+| `models` | 模型定价、模态、计费模式、倍率与并发上限 | `model_name`, `modality`, `pricing_mode`, `pricing_config`, `billing_policy`, `multiplier`, `max_concurrency` |
+| `channels` | 上游渠道配置 | `provider`, `base_url`, `api_key`, `models`, `protocol_type`, `upload_mode`, `model_mapping`, `supports_async`, `weight` |
 | `billing_logs` | 计费流水 | `user_id`, `model_name`, `amount_cents`, `prompt_tokens`, `completion_tokens` |
 
 ### 双余额体系设计
@@ -212,6 +213,10 @@ local billing_policy = ARGV[2] or "both"
 - 第一阶段允许 `file_id` 仅作为协议预留；在未引入文件服务前，适配器应优先支持 `http(s)` 与 `data:` 图片输入。
 - `图生视频`、`视频生视频` 等长任务绝不能硬塞进当前同步 ReverseProxy 结算链，必须设计为独立的异步任务接口与任务级结算流程。
 - 多模态扩展时，优先保持“对外兼容 OpenAI 生态、对内保持计费主链纯净”的原则，避免将视频任务逻辑污染现有文本/视觉同步热路径。
+- `models.pricing_mode` 当前至少支持：
+  - `token`: 沿用输入/输出 Token 价格模型
+  - `request`: 按次计费，价格从 `pricing_config.request_price_cents` 读取
+- `POST /v1/images/generations` 可作为第二阶段的图像生成入口，优先复用现有鉴权、预扣费、限流和代理主链；当前更适合 OpenAI-compatible 图像渠道。
 
 ---
 
@@ -219,13 +224,13 @@ local billing_policy = ARGV[2] or "both"
 
 | 阶段 | 文件 | 说明 |
 |------|------|------|
-| 鉴权+预扣 | [internal/middleware/auth.go](file:///Users/hugh/code/aihop/ainode/internal/middleware/auth.go#L32-L141) | 解析 Key、估算 Token、Redis Lua 预扣 |
-| 限流 | [internal/middleware/rate_limit.go](file:///Users/hugh/code/aihop/ainode/internal/middleware/rate_limit.go#L1-L106) | RPM/TPM 滑动窗口，超限退款 |
-| 模型并发 | [internal/middleware/model_concurrency.go](file:///Users/hugh/code/aihop/ainode/internal/middleware/model_concurrency.go) | 按模型全局并发占位，超限退款并返回 429 |
-| 代理 | [internal/proxy/reverse_proxy.go](file:///Users/hugh/code/aihop/ainode/internal/proxy/reverse_proxy.go#L1-L341) | 渠道选择、协议适配、请求转发、响应拦截 |
-| 流式计量 | [internal/proxy/tally_reader.go](file:///Users/hugh/code/aihop/ainode/internal/proxy/tally_reader.go#L1-L160) | SSE 拦截、Token 统计、断流止损 |
-| 结算 | [internal/billing/settlement.go](file:///Users/hugh/code/aihop/ainode/internal/billing/settlement.go#L42-L104) | 多退少补、异步推送账单任务 |
-| 异步写库 | [internal/worker/billing.go](file:///Users/hugh/code/aihop/ainode/internal/worker/billing.go#L1-L110) | Asynq 消费、幂等写入 PostgreSQL |
+| 鉴权+预扣 | [internal/middleware/auth.go](ainode/internal/middleware/auth.go#L32-L141) | 解析 Key、估算 Token、Redis Lua 预扣 |
+| 限流 | [internal/middleware/rate_limit.go](ainode/internal/middleware/rate_limit.go#L1-L106) | RPM/TPM 滑动窗口，超限退款 |
+| 模型并发 | [internal/middleware/model_concurrency.go](ainode/internal/middleware/model_concurrency.go) | 按模型全局并发占位，超限退款并返回 429 |
+| 代理 | [internal/proxy/reverse_proxy.go](ainode/internal/proxy/reverse_proxy.go#L1-L341) | 渠道选择、协议适配、请求转发、响应拦截 |
+| 流式计量 | [internal/proxy/tally_reader.go](ainode/internal/proxy/tally_reader.go#L1-L160) | SSE 拦截、Token 统计、断流止损 |
+| 结算 | [internal/billing/settlement.go](ainode/internal/billing/settlement.go#L42-L104) | 多退少补、异步推送账单任务 |
+| 异步写库 | [internal/worker/billing.go](ainode/internal/worker/billing.go#L1-L110) | Asynq 消费、幂等写入 PostgreSQL |
 
 ---
 
@@ -279,9 +284,9 @@ type ProviderAdapter interface {
 
 | 厂商 | 文件 | 说明 |
 |------|------|------|
-| OpenAI | [openai.go](file:///Users/hugh/code/aihop/ainode/internal/adapter/openai.go) | 透传，无改写 |
-| Anthropic | [anthropic.go](file:///Users/hugh/code/aihop/ainode/internal/adapter/anthropic.go#L1-L198) | 请求转 `/v1/messages`，SSE 翻译 `content_block_delta` → `choices[0].delta` |
-| Gemini | [gemini.go](file:///Users/hugh/code/aihop/ainode/internal/adapter/gemini.go#L1-L208) | 请求转 `/v1beta/models`，SSE 翻译原生格式 → OpenAI chunk |
+| OpenAI | [openai.go](ainode/internal/adapter/openai.go) | 透传，无改写 |
+| Anthropic | [anthropic.go](ainode/internal/adapter/anthropic.go#L1-L198) | 请求转 `/v1/messages`，SSE 翻译 `content_block_delta` → `choices[0].delta` |
+| Gemini | [gemini.go](ainode/internal/adapter/gemini.go#L1-L208) | 请求转 `/v1beta/models`，SSE 翻译原生格式 → OpenAI chunk |
 
 ---
 

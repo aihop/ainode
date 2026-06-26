@@ -160,6 +160,7 @@ curl http://localhost:5900/v1/models
 | `GET /v1/models` | 列出可用模型 |
 | `POST /v1/chat/completions` | 对话补全（支持流式） |
 | `POST /v1/completions` | 文本补全（支持流式） |
+| `POST /v1/images/generations` | 图像生成（第二阶段，当前优先适配 OpenAI-compatible 渠道） |
 
 使用任何 OpenAI SDK，指向你的网关地址和 API Key：
 
@@ -215,7 +216,7 @@ server:
   port: 5900
 
 db:
-  dsn: "postgres://user:pass@localhost:5432/node-api?sslmode=disable"
+  dsn: "postgres://user:pass@localhost:5432/ainode?sslmode=disable"
 
 redis:
   addr: "localhost:6379"
@@ -274,7 +275,7 @@ sqlc generate
 ### 编译
 
 ```bash
-go build -o node-api ./cmd/api
+go build -o ainode ./cmd/api
 ```
 
 ### 热重载（开发环境）

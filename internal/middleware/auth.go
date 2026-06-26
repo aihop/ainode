@@ -42,7 +42,9 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 
 			// 如果不是主要的计费接口（比如 /v1/models 或 /v1/dashboard），直接放行
 			// 我们主要拦截会产生大量消耗的生成接口
-			isBillingRoute := strings.HasSuffix(r.URL.Path, "/chat/completions") || strings.HasSuffix(r.URL.Path, "/completions")
+			isChatRoute := strings.HasSuffix(r.URL.Path, "/chat/completions") || strings.HasSuffix(r.URL.Path, "/completions")
+			isImageRoute := strings.HasSuffix(r.URL.Path, "/images/generations") || strings.HasSuffix(r.URL.Path, "/image/generations")
+			isBillingRoute := isChatRoute || isImageRoute
 			if !isBillingRoute {
 				// 标记为非计费请求，跳过预扣费，直接走到限流和代理
 				ctx = context.WithValue(ctx, "is_billing_route", false)
@@ -53,15 +55,21 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			ctx = context.WithValue(ctx, "is_billing_route", true)
 
 			// 2. 解析请求体以获取 Model 和 Prompt
-			var payload *media.ChatCompletionRequest
+			var (
+				modelName       string
+				promptTokens    int
+				maxOutputTokens int
+				requestType     string
+				billingUnits    int64 = 1
+			)
 			if r.Body != nil {
 				// 1. OOM 防护：使用 LimitReader 限制最大读取量为 5MB (5 * 1024 * 1024)
 				// 防止恶意用户发送超大文件导致内存溢出
 				const MaxBodySize = 5 * 1024 * 1024
 				limitedBody := io.LimitReader(r.Body, MaxBodySize)
 
-				bodyBytes, err := io.ReadAll(limitedBody)
-				if err != nil {
+				bodyBytes, readErr := io.ReadAll(limitedBody)
+				if readErr != nil {
 					utils.WriteOpenAIError(w, http.StatusBadRequest, "Cannot read request body", "invalid_request_error", "")
 					return
 				}
@@ -75,38 +83,55 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 				// 恢复 Body
 				r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
-				parsedPayload, err := media.ParseChatCompletionRequest(bodyBytes)
-				if err != nil {
-					utils.WriteOpenAIError(w, http.StatusBadRequest, "Invalid JSON format", "invalid_request_error", "")
-					return
+				switch {
+				case isChatRoute:
+					requestType = "chat"
+					parsedPayload, parseErr := media.ParseChatCompletionRequest(bodyBytes)
+					if parseErr != nil {
+						utils.WriteOpenAIError(w, http.StatusBadRequest, "Invalid JSON format", "invalid_request_error", "")
+						return
+					}
+					modelName = parsedPayload.Model
+					promptTokens = estimateChatPromptTokens(parsedPayload.Model, parsedPayload)
+					maxOutputTokens = parsedPayload.MaxTokens
+					if maxOutputTokens <= 0 {
+						maxOutputTokens = 4096
+					}
+				case isImageRoute:
+					requestType = "image_generation"
+					parsedPayload, parseErr := media.ParseImageGenerationRequest(bodyBytes)
+					if parseErr != nil {
+						utils.WriteOpenAIError(w, http.StatusBadRequest, "Invalid JSON format", "invalid_request_error", "")
+						return
+					}
+					modelName = parsedPayload.Model
+					promptTokens = estimatePlainTextTokens(parsedPayload.Model, parsedPayload.Prompt)
+					billingUnits = int64(parsedPayload.N)
+					maxOutputTokens = 0
 				}
-				payload = parsedPayload
 			}
 
-			if payload == nil || payload.Model == "" {
+			if modelName == "" {
 				utils.WriteOpenAIError(w, http.StatusBadRequest, "Model is required", "invalid_request_error", "model_required")
 				return
 			}
 
-			// 3. 预估 Prompt Tokens
-			promptTokens := estimatePromptTokens(payload.Model, payload)
-
-			// 4. 获取模型定价并计算最大可能消耗
-			modelInfo, err := config.GlobalModelManager.GetModel(ctx, queries, payload.Model)
+			// 3. 获取模型定价并计算最大可能消耗
+			modelInfo, err := config.GlobalModelManager.GetModel(ctx, queries, modelName)
 			if err != nil {
-				log.Printf("Model %s not found in DB, using fallback pricing", payload.Model)
-				utils.WriteOpenAIError(w, http.StatusBadRequest, fmt.Sprintf("Unsupported model: %s", payload.Model), "invalid_request_error", "unsupported_model")
+				log.Printf("Model %s not found in DB, using fallback pricing", modelName)
+				utils.WriteOpenAIError(w, http.StatusBadRequest, fmt.Sprintf("Unsupported model: %s", modelName), "invalid_request_error", "unsupported_model")
 				return
 			}
 
-			// 预估最大输出 Token：如果用户传了 max_tokens 就用用户的，否则使用模型默认上限 (假设 4096)
-			maxOutputTokens := payload.MaxTokens
-			if maxOutputTokens <= 0 {
-				maxOutputTokens = 4096
-			}
-
 			// 计算预扣费：先算基础成本，再应用倍率。预扣费使用向上取整，避免低估。
-			estimatedBaseCostCents := (int64(promptTokens)*modelInfo.InputPriceCents + int64(maxOutputTokens)*modelInfo.OutputPriceCents) / 1000000
+			estimatedBaseCostCents := int64(0)
+			if modelInfo.PricingMode == "request" {
+				requestPrice := utils.ParseRequestPricingConfig(modelInfo.PricingConfig).RequestPriceCents
+				estimatedBaseCostCents = requestPrice * billingUnits
+			} else {
+				estimatedBaseCostCents = (int64(promptTokens)*modelInfo.InputPriceCents + int64(maxOutputTokens)*modelInfo.OutputPriceCents) / 1000000
+			}
 			estimatedCostCents := utils.ApplyMultiplier(estimatedBaseCostCents, modelInfo.Multiplier, true)
 
 			// 5. 调用预扣费 (如果余额不足会返回错误)
@@ -119,11 +144,13 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			reqID := uuid.New().String()
 
 			// 6. 将核心数据注入 Context 供后续中间件 (限流) 和 Proxy 结算使用
-			ctx = context.WithValue(ctx, "model_name", payload.Model)
+			ctx = context.WithValue(ctx, "model_name", modelName)
+			ctx = context.WithValue(ctx, "request_type", requestType)
 			ctx = context.WithValue(ctx, "prompt_tokens", promptTokens)
 			ctx = context.WithValue(ctx, "pre_deducted_cents", estimatedCostCents)
 			ctx = context.WithValue(ctx, "grant_deducted", grantDeducted)
 			ctx = context.WithValue(ctx, "cash_deducted", cashDeducted)
+			ctx = context.WithValue(ctx, "billing_units", billingUnits)
 			ctx = context.WithValue(ctx, "estimated_tokens", int64(promptTokens+maxOutputTokens)) // 给 TPM 限流用
 			ctx = context.WithValue(ctx, "request_id", reqID)
 
@@ -133,7 +160,7 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 }
 
 // estimatePromptTokens 粗略估算输入的 Token 数量
-func estimatePromptTokens(model string, payload *media.ChatCompletionRequest) int {
+func estimateChatPromptTokens(model string, payload *media.ChatCompletionRequest) int {
 	tkm, err := tiktoken.EncodingForModel(model)
 	if err != nil {
 		tkm, _ = tiktoken.GetEncoding("cl100k_base")
@@ -146,4 +173,17 @@ func estimatePromptTokens(model string, payload *media.ChatCompletionRequest) in
 	return media.EstimatePromptTokens(payload, func(value string) int {
 		return len(tkm.Encode(value, nil, nil))
 	})
+}
+
+func estimatePlainTextTokens(model, text string) int {
+	tkm, err := tiktoken.EncodingForModel(model)
+	if err != nil {
+		tkm, _ = tiktoken.GetEncoding("cl100k_base")
+	}
+
+	if tkm == nil {
+		return 10
+	}
+
+	return len(tkm.Encode(text, nil, nil))
 }

@@ -164,14 +164,18 @@ type BillingLogs202612 struct {
 }
 
 type Channel struct {
-	ID       int32
-	Name     string
-	Provider string
-	BaseUrl  string
-	ApiKey   string
-	Models   string
-	Weight   pgtype.Int4
-	Status   pgtype.Int4
+	ID            int32
+	Name          string
+	Provider      string
+	BaseUrl       string
+	ApiKey        string
+	Models        string
+	ProtocolType  string
+	UploadMode    string
+	ModelMapping  []byte
+	SupportsAsync bool
+	Weight        pgtype.Int4
+	Status        pgtype.Int4
 }
 
 type Model struct {
@@ -183,6 +187,9 @@ type Model struct {
 	CacheMissPriceCents int64
 	Multiplier          float32
 	BillingPolicy       string
+	Modality            string
+	PricingMode         string
+	PricingConfig       []byte
 	MaxConcurrency      int32
 	Status              pgtype.Int4
 }

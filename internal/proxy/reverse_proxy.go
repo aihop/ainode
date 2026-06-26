@@ -67,9 +67,11 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 
 		// 执行 Adapter 请求体与路由转换 (只有计费路由才需要复杂的转换)
 		if isBillingRoute {
-			provAdapter := adapter.GetAdapter(ch.Provider)
-			if err := provAdapter.RewriteRequest(req, modelName); err != nil {
-				return nil, fmt.Errorf("failed to rewrite request via adapter: %w", err)
+			if strings.HasSuffix(req.URL.Path, "/chat/completions") || strings.HasSuffix(req.URL.Path, "/completions") {
+				provAdapter := adapter.GetAdapter(ch.Provider)
+				if rewriteErr := provAdapter.RewriteRequest(req, modelName); rewriteErr != nil {
+					return nil, fmt.Errorf("failed to rewrite request via adapter: %w", rewriteErr)
+				}
 			}
 		}
 
@@ -169,6 +171,8 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 		grantDeducted, _ := ctx.Value("grant_deducted").(int64)
 		cashDeducted, _ := ctx.Value("cash_deducted").(int64)
 		promptTokens, _ := ctx.Value("prompt_tokens").(int)
+		requestType, _ := ctx.Value("request_type").(string)
+		billingUnits, _ := ctx.Value("billing_units").(int64)
 
 		if resp.StatusCode != http.StatusOK {
 			// 如果最终还是失败，应该在这里触发全额退还预扣费的回调
@@ -190,12 +194,16 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 		cacheHitPrice := int64(0)
 		cacheMissPrice := int64(0)
 		multiplier := float32(1)
+		pricingMode := "token"
+		requestPrice := int64(0)
 		if modelInfo, err := config.GlobalModelManager.GetModel(context.Background(), queries, modelName); err == nil {
 			inputPrice = modelInfo.InputPriceCents
 			outputPrice = modelInfo.OutputPriceCents
 			cacheHitPrice = modelInfo.CacheHitPriceCents
 			cacheMissPrice = modelInfo.CacheMissPriceCents
 			multiplier = modelInfo.Multiplier
+			pricingMode = modelInfo.PricingMode
+			requestPrice = utils.ParseRequestPricingConfig(modelInfo.PricingConfig).RequestPriceCents
 		}
 
 		onComplete := func(pTokens, cTokens, cacheHitTokens, cacheMissTokens int) {
@@ -222,10 +230,18 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				regularPromptTokens = 0
 			}
 
-			actualBaseCost := (int64(regularPromptTokens)*inputPrice +
-				int64(cacheHitTokens)*cacheHitPrice +
-				int64(cacheMissTokens)*cacheMissPrice +
-				int64(cTokens)*outputPrice) / 1000000
+			actualBaseCost := int64(0)
+			if pricingMode == "request" || requestType == "image_generation" {
+				if billingUnits <= 0 {
+					billingUnits = 1
+				}
+				actualBaseCost = requestPrice * billingUnits
+			} else {
+				actualBaseCost = (int64(regularPromptTokens)*inputPrice +
+					int64(cacheHitTokens)*cacheHitPrice +
+					int64(cacheMissTokens)*cacheMissPrice +
+					int64(cTokens)*outputPrice) / 1000000
+			}
 			actualCost := utils.ApplyMultiplier(actualBaseCost, multiplier, false)
 
 			settleReq := billing.SettlementRequest{

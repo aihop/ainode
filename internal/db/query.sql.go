@@ -203,19 +203,27 @@ INSERT INTO
         api_key,
         weight,
         models,
+        protocol_type,
+        upload_mode,
+        model_mapping,
+        supports_async,
         status
     )
-VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, provider, base_url, api_key, models, weight, status
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, name, provider, base_url, api_key, models, protocol_type, upload_mode, model_mapping, supports_async, weight, status
 `
 
 type CreateChannelParams struct {
-	Name     string
-	Provider string
-	BaseUrl  string
-	ApiKey   string
-	Weight   pgtype.Int4
-	Models   string
-	Status   pgtype.Int4
+	Name          string
+	Provider      string
+	BaseUrl       string
+	ApiKey        string
+	Weight        pgtype.Int4
+	Models        string
+	ProtocolType  string
+	UploadMode    string
+	ModelMapping  []byte
+	SupportsAsync bool
+	Status        pgtype.Int4
 }
 
 // ==========================================
@@ -229,6 +237,10 @@ func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) (C
 		arg.ApiKey,
 		arg.Weight,
 		arg.Models,
+		arg.ProtocolType,
+		arg.UploadMode,
+		arg.ModelMapping,
+		arg.SupportsAsync,
 		arg.Status,
 	)
 	var i Channel
@@ -239,6 +251,10 @@ func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) (C
 		&i.BaseUrl,
 		&i.ApiKey,
 		&i.Models,
+		&i.ProtocolType,
+		&i.UploadMode,
+		&i.ModelMapping,
+		&i.SupportsAsync,
 		&i.Weight,
 		&i.Status,
 	)
@@ -255,10 +271,26 @@ INSERT INTO
         cache_miss_price_cents,
         multiplier,
         billing_policy,
+        modality,
+        pricing_mode,
+        pricing_config,
         max_concurrency,
         status
     )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, billing_policy, max_concurrency, status
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING
+    id,
+    model_name,
+    input_price_cents,
+    output_price_cents,
+    cache_hit_price_cents,
+    cache_miss_price_cents,
+    multiplier,
+    billing_policy,
+    modality,
+    pricing_mode,
+    pricing_config,
+    max_concurrency,
+    status
 `
 
 type CreateModelParams struct {
@@ -269,6 +301,9 @@ type CreateModelParams struct {
 	CacheMissPriceCents int64
 	Multiplier          float32
 	BillingPolicy       string
+	Modality            string
+	PricingMode         string
+	PricingConfig       []byte
 	MaxConcurrency      int32
 	Status              pgtype.Int4
 }
@@ -282,6 +317,9 @@ func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (Model
 		arg.CacheMissPriceCents,
 		arg.Multiplier,
 		arg.BillingPolicy,
+		arg.Modality,
+		arg.PricingMode,
+		arg.PricingConfig,
 		arg.MaxConcurrency,
 		arg.Status,
 	)
@@ -295,6 +333,9 @@ func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (Model
 		&i.CacheMissPriceCents,
 		&i.Multiplier,
 		&i.BillingPolicy,
+		&i.Modality,
+		&i.PricingMode,
+		&i.PricingConfig,
 		&i.MaxConcurrency,
 		&i.Status,
 	)
@@ -334,7 +375,7 @@ func (q *Queries) DeleteModel(ctx context.Context, modelName string) error {
 }
 
 const getChannelByID = `-- name: GetChannelByID :one
-SELECT id, name, provider, base_url, api_key, models, weight, status FROM channels WHERE id = $1 LIMIT 1
+SELECT id, name, provider, base_url, api_key, models, protocol_type, upload_mode, model_mapping, supports_async, weight, status FROM channels WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetChannelByID(ctx context.Context, id int32) (Channel, error) {
@@ -347,6 +388,10 @@ func (q *Queries) GetChannelByID(ctx context.Context, id int32) (Channel, error)
 		&i.BaseUrl,
 		&i.ApiKey,
 		&i.Models,
+		&i.ProtocolType,
+		&i.UploadMode,
+		&i.ModelMapping,
+		&i.SupportsAsync,
 		&i.Weight,
 		&i.Status,
 	)
@@ -354,7 +399,25 @@ func (q *Queries) GetChannelByID(ctx context.Context, id int32) (Channel, error)
 }
 
 const getModelByName = `-- name: GetModelByName :one
-SELECT id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, billing_policy, max_concurrency, status FROM models WHERE model_name = $1 AND status = 1 LIMIT 1
+SELECT
+    id,
+    model_name,
+    input_price_cents,
+    output_price_cents,
+    cache_hit_price_cents,
+    cache_miss_price_cents,
+    multiplier,
+    billing_policy,
+    modality,
+    pricing_mode,
+    pricing_config,
+    max_concurrency,
+    status
+FROM models
+WHERE
+    model_name = $1
+    AND status = 1
+LIMIT 1
 `
 
 func (q *Queries) GetModelByName(ctx context.Context, modelName string) (Model, error) {
@@ -369,6 +432,9 @@ func (q *Queries) GetModelByName(ctx context.Context, modelName string) (Model, 
 		&i.CacheMissPriceCents,
 		&i.Multiplier,
 		&i.BillingPolicy,
+		&i.Modality,
+		&i.PricingMode,
+		&i.PricingConfig,
 		&i.MaxConcurrency,
 		&i.Status,
 	)
@@ -743,7 +809,7 @@ func (q *Queries) GetUserTrendSeries(ctx context.Context, arg GetUserTrendSeries
 }
 
 const listActiveChannels = `-- name: ListActiveChannels :many
-SELECT id, name, provider, base_url, api_key, models, weight, status FROM channels WHERE status = 1 ORDER BY weight DESC
+SELECT id, name, provider, base_url, api_key, models, protocol_type, upload_mode, model_mapping, supports_async, weight, status FROM channels WHERE status = 1 ORDER BY weight DESC
 `
 
 func (q *Queries) ListActiveChannels(ctx context.Context) ([]Channel, error) {
@@ -762,6 +828,10 @@ func (q *Queries) ListActiveChannels(ctx context.Context) ([]Channel, error) {
 			&i.BaseUrl,
 			&i.ApiKey,
 			&i.Models,
+			&i.ProtocolType,
+			&i.UploadMode,
+			&i.ModelMapping,
+			&i.SupportsAsync,
 			&i.Weight,
 			&i.Status,
 		); err != nil {
@@ -776,7 +846,24 @@ func (q *Queries) ListActiveChannels(ctx context.Context) ([]Channel, error) {
 }
 
 const listActiveModels = `-- name: ListActiveModels :many
-SELECT id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, billing_policy, max_concurrency, status FROM models WHERE status = 1 ORDER BY model_name ASC
+SELECT
+    id,
+    model_name,
+    input_price_cents,
+    output_price_cents,
+    cache_hit_price_cents,
+    cache_miss_price_cents,
+    multiplier,
+    billing_policy,
+    modality,
+    pricing_mode,
+    pricing_config,
+    max_concurrency,
+    status
+FROM models
+WHERE
+    status = 1
+ORDER BY model_name ASC
 `
 
 func (q *Queries) ListActiveModels(ctx context.Context) ([]Model, error) {
@@ -797,6 +884,9 @@ func (q *Queries) ListActiveModels(ctx context.Context) ([]Model, error) {
 			&i.CacheMissPriceCents,
 			&i.Multiplier,
 			&i.BillingPolicy,
+			&i.Modality,
+			&i.PricingMode,
+			&i.PricingConfig,
 			&i.MaxConcurrency,
 			&i.Status,
 		); err != nil {
@@ -811,7 +901,7 @@ func (q *Queries) ListActiveModels(ctx context.Context) ([]Model, error) {
 }
 
 const listAllChannels = `-- name: ListAllChannels :many
-SELECT id, name, provider, base_url, api_key, models, weight, status FROM channels ORDER BY id DESC
+SELECT id, name, provider, base_url, api_key, models, protocol_type, upload_mode, model_mapping, supports_async, weight, status FROM channels ORDER BY id DESC
 `
 
 func (q *Queries) ListAllChannels(ctx context.Context) ([]Channel, error) {
@@ -830,6 +920,10 @@ func (q *Queries) ListAllChannels(ctx context.Context) ([]Channel, error) {
 			&i.BaseUrl,
 			&i.ApiKey,
 			&i.Models,
+			&i.ProtocolType,
+			&i.UploadMode,
+			&i.ModelMapping,
+			&i.SupportsAsync,
 			&i.Weight,
 			&i.Status,
 		); err != nil {
@@ -844,7 +938,22 @@ func (q *Queries) ListAllChannels(ctx context.Context) ([]Channel, error) {
 }
 
 const listAllModelsForAdmin = `-- name: ListAllModelsForAdmin :many
-SELECT id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, billing_policy, max_concurrency, status FROM models ORDER BY model_name ASC
+SELECT
+    id,
+    model_name,
+    input_price_cents,
+    output_price_cents,
+    cache_hit_price_cents,
+    cache_miss_price_cents,
+    multiplier,
+    billing_policy,
+    modality,
+    pricing_mode,
+    pricing_config,
+    max_concurrency,
+    status
+FROM models
+ORDER BY model_name ASC
 `
 
 func (q *Queries) ListAllModelsForAdmin(ctx context.Context) ([]Model, error) {
@@ -865,6 +974,9 @@ func (q *Queries) ListAllModelsForAdmin(ctx context.Context) ([]Model, error) {
 			&i.CacheMissPriceCents,
 			&i.Multiplier,
 			&i.BillingPolicy,
+			&i.Modality,
+			&i.PricingMode,
+			&i.PricingConfig,
 			&i.MaxConcurrency,
 			&i.Status,
 		); err != nil {
@@ -978,20 +1090,28 @@ SET
     api_key = $5,
     weight = $6,
     models = $7,
-    status = $8
+    protocol_type = $8,
+    upload_mode = $9,
+    model_mapping = $10,
+    supports_async = $11,
+    status = $12
 WHERE
-    id = $1 RETURNING id, name, provider, base_url, api_key, models, weight, status
+    id = $1 RETURNING id, name, provider, base_url, api_key, models, protocol_type, upload_mode, model_mapping, supports_async, weight, status
 `
 
 type UpdateChannelParams struct {
-	ID       int32
-	Name     string
-	Provider string
-	BaseUrl  string
-	ApiKey   string
-	Weight   pgtype.Int4
-	Models   string
-	Status   pgtype.Int4
+	ID            int32
+	Name          string
+	Provider      string
+	BaseUrl       string
+	ApiKey        string
+	Weight        pgtype.Int4
+	Models        string
+	ProtocolType  string
+	UploadMode    string
+	ModelMapping  []byte
+	SupportsAsync bool
+	Status        pgtype.Int4
 }
 
 func (q *Queries) UpdateChannel(ctx context.Context, arg UpdateChannelParams) (Channel, error) {
@@ -1003,6 +1123,10 @@ func (q *Queries) UpdateChannel(ctx context.Context, arg UpdateChannelParams) (C
 		arg.ApiKey,
 		arg.Weight,
 		arg.Models,
+		arg.ProtocolType,
+		arg.UploadMode,
+		arg.ModelMapping,
+		arg.SupportsAsync,
 		arg.Status,
 	)
 	var i Channel
@@ -1013,6 +1137,10 @@ func (q *Queries) UpdateChannel(ctx context.Context, arg UpdateChannelParams) (C
 		&i.BaseUrl,
 		&i.ApiKey,
 		&i.Models,
+		&i.ProtocolType,
+		&i.UploadMode,
+		&i.ModelMapping,
+		&i.SupportsAsync,
 		&i.Weight,
 		&i.Status,
 	)
@@ -1042,10 +1170,26 @@ SET
     cache_miss_price_cents = $5,
     multiplier = $6,
     billing_policy = $7,
-    max_concurrency = $8,
-    status = $9
+    modality = $8,
+    pricing_mode = $9,
+    pricing_config = $10,
+    max_concurrency = $11,
+    status = $12
 WHERE
-    model_name = $1 RETURNING id, model_name, input_price_cents, output_price_cents, cache_hit_price_cents, cache_miss_price_cents, multiplier, billing_policy, max_concurrency, status
+    model_name = $1 RETURNING
+    id,
+    model_name,
+    input_price_cents,
+    output_price_cents,
+    cache_hit_price_cents,
+    cache_miss_price_cents,
+    multiplier,
+    billing_policy,
+    modality,
+    pricing_mode,
+    pricing_config,
+    max_concurrency,
+    status
 `
 
 type UpdateModelParams struct {
@@ -1056,6 +1200,9 @@ type UpdateModelParams struct {
 	CacheMissPriceCents int64
 	Multiplier          float32
 	BillingPolicy       string
+	Modality            string
+	PricingMode         string
+	PricingConfig       []byte
 	MaxConcurrency      int32
 	Status              pgtype.Int4
 }
@@ -1069,6 +1216,9 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (Model
 		arg.CacheMissPriceCents,
 		arg.Multiplier,
 		arg.BillingPolicy,
+		arg.Modality,
+		arg.PricingMode,
+		arg.PricingConfig,
 		arg.MaxConcurrency,
 		arg.Status,
 	)
@@ -1082,6 +1232,9 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (Model
 		&i.CacheMissPriceCents,
 		&i.Multiplier,
 		&i.BillingPolicy,
+		&i.Modality,
+		&i.PricingMode,
+		&i.PricingConfig,
 		&i.MaxConcurrency,
 		&i.Status,
 	)

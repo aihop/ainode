@@ -238,8 +238,15 @@ curl http://localhost:5900/v1/chat/completions \
 ### 第二阶段待开发
 
 - `models` 增加 `modality / pricing_mode / pricing_config`
-- `channels` 增加 `supports_async / model_mapping / upload_mode`
-- 增加 `POST /v1/image/generations`
+- `channels` 增加 `supports_async / model_mapping / upload_mode / protocol_type`
+- 增加 `POST /v1/images/generations`
+
+### 第二阶段已落地部分
+
+- `models` 已支持 `modality / pricing_mode / pricing_config`
+- `channels` 已支持 `protocol_type / upload_mode / model_mapping / supports_async`
+- `/v1/images/generations` 已接入鉴权、预扣费、限流与结算主链
+- 当前图像生成更适合 `OpenAI-compatible` 上游渠道，Gemini / Anthropic 图像生成适配仍留待后续补齐
 
 ### 第三阶段待开发
 

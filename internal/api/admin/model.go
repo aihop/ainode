@@ -29,6 +29,9 @@ func (h *AdminHandler) CreateModel(w http.ResponseWriter, r *http.Request) {
 		CacheMissPriceCents int64   `json:"cache_miss_price_cents"`
 		Multiplier          float32 `json:"multiplier"`
 		BillingPolicy       string  `json:"billing_policy"`
+		Modality            string  `json:"modality"`
+		PricingMode         string  `json:"pricing_mode"`
+		PricingConfig       json.RawMessage `json:"pricing_config"`
 		MaxConcurrency      int32   `json:"max_concurrency"`
 		Status              int32   `json:"status"`
 	}
@@ -39,6 +42,12 @@ func (h *AdminHandler) CreateModel(w http.ResponseWriter, r *http.Request) {
 	if req.BillingPolicy == "" {
 		req.BillingPolicy = "both"
 	}
+	if req.Modality == "" {
+		req.Modality = "text"
+	}
+	if req.PricingMode == "" {
+		req.PricingMode = "token"
+	}
 
 	model, err := h.queries.CreateModel(r.Context(), db.CreateModelParams{
 		ModelName:           req.ModelName,
@@ -48,6 +57,9 @@ func (h *AdminHandler) CreateModel(w http.ResponseWriter, r *http.Request) {
 		CacheMissPriceCents: req.CacheMissPriceCents,
 		Multiplier:          req.Multiplier,
 		BillingPolicy:       req.BillingPolicy,
+		Modality:            req.Modality,
+		PricingMode:         req.PricingMode,
+		PricingConfig:       rawJSONOrDefault(req.PricingConfig),
 		MaxConcurrency:      req.MaxConcurrency,
 		Status:              pgtype.Int4{Int32: req.Status, Valid: true},
 	})
@@ -75,6 +87,9 @@ func (h *AdminHandler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 		CacheMissPriceCents int64   `json:"cache_miss_price_cents"`
 		Multiplier          float32 `json:"multiplier"`
 		BillingPolicy       string  `json:"billing_policy"`
+		Modality            string  `json:"modality"`
+		PricingMode         string  `json:"pricing_mode"`
+		PricingConfig       json.RawMessage `json:"pricing_config"`
 		MaxConcurrency      int32   `json:"max_concurrency"`
 		Status              int32   `json:"status"`
 	}
@@ -85,6 +100,12 @@ func (h *AdminHandler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 	if req.BillingPolicy == "" {
 		req.BillingPolicy = "both"
 	}
+	if req.Modality == "" {
+		req.Modality = "text"
+	}
+	if req.PricingMode == "" {
+		req.PricingMode = "token"
+	}
 
 	model, err := h.queries.UpdateModel(r.Context(), db.UpdateModelParams{
 		ModelName:           modelName,
@@ -94,6 +115,9 @@ func (h *AdminHandler) UpdateModel(w http.ResponseWriter, r *http.Request) {
 		CacheMissPriceCents: req.CacheMissPriceCents,
 		Multiplier:          req.Multiplier,
 		BillingPolicy:       req.BillingPolicy,
+		Modality:            req.Modality,
+		PricingMode:         req.PricingMode,
+		PricingConfig:       rawJSONOrDefault(req.PricingConfig),
 		MaxConcurrency:      req.MaxConcurrency,
 		Status:              pgtype.Int4{Int32: req.Status, Valid: true},
 	})

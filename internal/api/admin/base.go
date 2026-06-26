@@ -22,6 +22,13 @@ func notifyConfigRefresh(ctx context.Context) {
 	billing.RedisClient.Publish(ctx, "ainode_config_refresh", "refresh")
 }
 
+func rawJSONOrDefault(raw json.RawMessage) []byte {
+	if len(raw) == 0 || string(raw) == "null" {
+		return []byte("{}")
+	}
+	return raw
+}
+
 func jsonResponse(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

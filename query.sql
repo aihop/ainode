@@ -74,6 +74,9 @@ SELECT
     cache_miss_price_cents,
     multiplier,
     billing_policy,
+    modality,
+    pricing_mode,
+    pricing_config,
     max_concurrency,
     status
 FROM models
@@ -92,6 +95,9 @@ SELECT
     cache_miss_price_cents,
     multiplier,
     billing_policy,
+    modality,
+    pricing_mode,
+    pricing_config,
     max_concurrency,
     status
 FROM models
@@ -145,9 +151,13 @@ INSERT INTO
         api_key,
         weight,
         models,
+        protocol_type,
+        upload_mode,
+        model_mapping,
+        supports_async,
         status
     )
-VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *;
 
 -- name: UpdateChannel :one
 UPDATE channels
@@ -158,7 +168,11 @@ SET
     api_key = $5,
     weight = $6,
     models = $7,
-    status = $8
+    protocol_type = $8,
+    upload_mode = $9,
+    model_mapping = $10,
+    supports_async = $11,
+    status = $12
 WHERE
     id = $1 RETURNING *;
 
@@ -181,10 +195,13 @@ INSERT INTO
         cache_miss_price_cents,
         multiplier,
         billing_policy,
+        modality,
+        pricing_mode,
+        pricing_config,
         max_concurrency,
         status
     )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING
     id,
     model_name,
     input_price_cents,
@@ -193,6 +210,9 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING
     cache_miss_price_cents,
     multiplier,
     billing_policy,
+    modality,
+    pricing_mode,
+    pricing_config,
     max_concurrency,
     status;
 
@@ -205,8 +225,11 @@ SET
     cache_miss_price_cents = $5,
     multiplier = $6,
     billing_policy = $7,
-    max_concurrency = $8,
-    status = $9
+    modality = $8,
+    pricing_mode = $9,
+    pricing_config = $10,
+    max_concurrency = $11,
+    status = $12
 WHERE
     model_name = $1 RETURNING
     id,
@@ -217,6 +240,9 @@ WHERE
     cache_miss_price_cents,
     multiplier,
     billing_policy,
+    modality,
+    pricing_mode,
+    pricing_config,
     max_concurrency,
     status;
 
@@ -233,6 +259,9 @@ SELECT
     cache_miss_price_cents,
     multiplier,
     billing_policy,
+    modality,
+    pricing_mode,
+    pricing_config,
     max_concurrency,
     status
 FROM models

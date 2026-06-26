@@ -222,7 +222,7 @@ server:
   port: 5900
 
 db:
-  dsn: "postgres://user:pass@localhost:5432/node-api?sslmode=disable"
+  dsn: "postgres://user:pass@localhost:5432/ainode?sslmode=disable"
 
 redis:
   addr: "localhost:6379"
@@ -281,7 +281,7 @@ sqlc generate
 ### Build
 
 ```bash
-go build -o node-api ./cmd/api
+go build -o ainode ./cmd/api
 ```
 
 ### Hot Reload (Development)
