@@ -99,8 +99,8 @@
 
 ```
 ├── cmd/api/main.go          # 程序入口，依赖注入，路由组装
+├── cmd/migrate/main.go      # 手动迁移执行器
 ├── internal/
-│   ├── proxy/               # 反向代理、故障切换、SSE 计量
 │   ├── adapter/             # 协议适配器（Anthropic/Gemini → OpenAI 格式）
 │   ├── billing/             # Redis Lua 脚本、预扣费/退款/结算
 │   ├── channel/             # 上游渠道池管理与负载均衡
@@ -110,7 +110,9 @@
 │   ├── metrics/             # Prometheus 埋点
 │   ├── worker/              # 异步账单写入（Asynq）
 │   └── utils/               # OpenAI 兼容错误格式封装
-├── schema.sql               # PostgreSQL 表结构（启动时自动建表）
+├── schema.sql               # PostgreSQL 表结构（启动时自动建表/手动迁移基线）
+├── migrations/              # 增量 SQL 迁移目录
+├── scripts/migrate.sh       # 傻瓜式手动迁移脚本
 ├── query.sql                # sqlc 查询定义
 ├── sqlc.yaml                # sqlc 配置
 └── config.yaml              # 默认配置
@@ -138,6 +140,40 @@ go run cmd/api/main.go
 ```
 
 服务启动时会自动创建数据库表。
+
+### 手动迁移
+
+如果你不想依赖“服务启动时自动迁移”，可以直接执行：
+
+```bash
+cd ainode
+./scripts/migrate.sh
+```
+
+或使用 Makefile：
+
+```bash
+make migrate
+```
+
+查看迁移状态：
+
+```bash
+./scripts/migrate.sh status
+make migrate-status
+```
+
+脚本会按以下顺序执行：
+
+- 先执行根目录的 `schema.sql`，并记录为基线迁移 `0000_schema.sql`
+- 再按文件名字典序执行 `migrations/*.sql`
+- 已执行过的版本会记录到 `schema_migrations` 表，不会重复执行
+
+如果你使用环境变量方式传数据库连接，可以这样：
+
+```bash
+DATABASE_URL="postgres://user:pass@host:5432/ainode?sslmode=disable" ./scripts/migrate.sh
+```
 
 ### 验证
 

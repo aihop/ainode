@@ -4,6 +4,7 @@
 > `2026-06-26`: 新增多模态网关演进约定，统一媒体输入抽象与图生视频异步任务设计边界，见 Section 4.6。
 > `2026-06-26`: 扩展 models/channels 多模态元数据字段，并引入 request 计费模式与图像生成入口约定，见 Section 3 与 Section 4.6。
 > `2026-06-26`: 新增 async_tasks 表与视频异步任务路由骨架，见 Section 3、Section 4.6 与 Section 6。
+> `2026-06-26`: 新增 `cmd/migrate` 与 `scripts/migrate.sh` 手动迁移入口，见 Section 2 与 Section 3。
 
 ## 1. 项目定位与核心架构
 
@@ -32,6 +33,7 @@ AI 请严格按照以下结构组织代码：
 ```text
 .
 ├── cmd/api/main.go          # 程序入口，组装路由与依赖注入
+├── cmd/migrate/main.go      # 手动迁移执行器，顺序执行 schema.sql 与 migrations/*.sql
 ├── internal/
 │   ├── proxy/               # ReverseProxy 核心逻辑、重试机制 (Fallback)
 │   │   ├── reverse_proxy.go # 自定义 Transport、ModifyResponse、ErrorHandler
@@ -73,7 +75,9 @@ AI 请严格按照以下结构组织代码：
 │   │   └── billing.go       # 账单持久化 Worker
 │   └── utils/               # 工具
 │       └── error.go         # OpenAI 兼容错误格式封装
-├── schema.sql               # PostgreSQL 表结构定义
+├── schema.sql               # PostgreSQL 表结构定义（也作为手动迁移基线）
+├── migrations/              # 增量 SQL 迁移目录
+├── scripts/migrate.sh       # 用户可直接执行的手动迁移脚本
 ├── query.sql                # sqlc 查询语句定义
 ├── sqlc.yaml                # sqlc 配置文件
 ├── config.yaml              # 默认配置
@@ -90,6 +94,12 @@ AI 请严格按照以下结构组织代码：
 本项目采用单文件 `schema.sql` 进行数据库管理。
 
 **自动同步机制**: 在 `cmd/api/main.go` 启动时，系统会自动执行 `schema.sql` 脚本，借助 `IF NOT EXISTS` 语句确保数据库表结构安全地初始化。
+
+**手动迁移机制**:
+
+- `cmd/migrate/main.go` 会先执行根目录 `schema.sql` 作为基线，再按字典序执行 `migrations/*.sql`
+- 已执行版本记录在 `schema_migrations` 表
+- 推荐线上部署优先使用 `./scripts/migrate.sh` 或 `make migrate`，而不是完全依赖启动自动迁移
 
 ### 核心表概览
 
