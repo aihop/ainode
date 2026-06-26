@@ -214,6 +214,7 @@ func main() {
 			siteRouter.Get("/api/site/stats", siteHandler.StatsHandler)
 			siteRouter.Get("/api/site/dashboard", siteHandler.DashboardHandler)
 			siteRouter.Get("/api/site/billing-logs/list", siteHandler.BillingLogsListHandler)
+			siteRouter.Get("/api/site/balance-logs/list", siteHandler.BalanceLogsListHandler)
 			siteRouter.Get("/api/site/model-failure-logs/list", siteHandler.ModelFailureLogsListHandler)
 			siteRouter.Get("/api/site/api-keys/list", siteHandler.ListAPIKeysHandler)
 			siteRouter.Post("/api/site/api-keys/create", siteHandler.CreateAPIKeyHandler)

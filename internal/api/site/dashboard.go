@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/db"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/sync/errgroup"
@@ -44,6 +45,8 @@ func (h *InternalHandler) DashboardHandler(w http.ResponseWriter, r *http.Reques
 	var activeKeysCount int64
 	var summary db.GetUserStatsSummaryRow
 	var userKeys []db.GetUserAPIKeysRow
+	var grantBalance, cashBalance int64
+	var totalSpend int64
 
 	eg.Go(func() error {
 		var err error
@@ -64,6 +67,22 @@ func (h *InternalHandler) DashboardHandler(w http.ResponseWriter, r *http.Reques
 		var err error
 		userKeys, err = h.queries.GetUserAPIKeys(egCtx, pgUserID)
 		return err
+	})
+
+	eg.Go(func() error {
+		// 钱包余额（优先 Redis 实时，缺失回源 DB）。查询失败不阻塞整个仪表盘。
+		if g, c, berr := billing.GetUserBalance(egCtx, h.queries, int32(userID)); berr == nil {
+			grantBalance, cashBalance = g, c
+		}
+		return nil
+	})
+
+	eg.Go(func() error {
+		// 累计(全时段)总支出。失败不阻塞仪表盘。
+		if t, terr := h.queries.GetUserTotalSpend(egCtx, int32(userID)); terr == nil {
+			totalSpend = t
+		}
+		return nil
 	})
 
 	eg.Go(func() error {
@@ -122,6 +141,22 @@ func (h *InternalHandler) DashboardHandler(w http.ResponseWriter, r *http.Reques
 
 	// 构建返回的 JSON
 	response := map[string]interface{}{
+		"balance": map[string]interface{}{
+			// 高精度金额（8 位，与 10^8 刻度对齐）
+			"cash":  centsToMoneyPrecise(cashBalance),
+			"grant": centsToMoneyPrecise(grantBalance),
+			"total": centsToMoneyPrecise(cashBalance + grantBalance),
+			// 原始整数（精确账本值，前端做累加/对账用这个）
+			"cashCents":  cashBalance,
+			"grantCents": grantBalance,
+			"totalCents": cashBalance + grantBalance,
+		},
+		// 最近 30 天支出
+		"monthlySpend":      centsToMoneyPrecise(summary.TotalAmount),
+		"monthlySpendCents": summary.TotalAmount,
+		// 累计总支出（替代原「冻结资金」卡片）
+		"totalSpend":      centsToMoneyPrecise(totalSpend),
+		"totalSpendCents": totalSpend,
 		"activeKeysCount": activeKeysCount,
 		"totalCallsThisMonth": func() int64 {
 			var total int64 = 0
