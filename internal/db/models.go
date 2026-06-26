@@ -168,7 +168,7 @@ type User struct {
 	CashBalance    pgtype.Int8
 	GrantBalance   pgtype.Int8
 	TierLevel      pgtype.Int4
-	GrantExpiresAt pgtype.Timestamptz
+	SubExpiresAt pgtype.Timestamptz
 	Status         pgtype.Int4
 	LastLoginAt    pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz

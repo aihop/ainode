@@ -8,16 +8,10 @@ CREATE TABLE IF NOT EXISTS users (
     cash_balance BIGINT DEFAULT 0, -- 充值余额（永不过期），金额放大 10^8 倍存储
     grant_balance BIGINT DEFAULT 0, -- 订阅周期赠送余额（按周期清零），放大 10^8 倍存储
     tier_level INT DEFAULT 0, -- 订阅等级 (0: Free, 1: Pro, 2: Enterprise)，用于网关高并发优先级控制
-    grant_expires_at TIMESTAMP
-    WITH
-        TIME ZONE DEFAULT NULL, -- 订阅周期赠送到期时间
-        status INT DEFAULT 1, -- 1: 正常, 0: 禁用
-        last_login_at TIMESTAMP
-    WITH
-        TIME ZONE DEFAULT NULL,
-        created_at TIMESTAMP
-    WITH
-        TIME ZONE DEFAULT NOW()
+    -- 订阅到期时间统一用 sub_expires_at（见下方 ALTER，替代旧 grant_expires_at）
+    status INT DEFAULT 1, -- 1: 正常, 0: 禁用
+    last_login_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- API Keys 表 (用户网关调用凭证，独立表)

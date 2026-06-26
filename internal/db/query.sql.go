@@ -1075,7 +1075,7 @@ SELECT
     u.cash_balance,
     u.grant_balance,
     u.tier_level AS user_tier,
-    u.grant_expires_at,
+    u.sub_expires_at,
     u.status,
     u.last_login_at,
     u.created_at,
@@ -1107,7 +1107,7 @@ type GetUserByAPIKeyRow struct {
 	CashBalance    pgtype.Int8
 	GrantBalance   pgtype.Int8
 	UserTier       pgtype.Int4
-	GrantExpiresAt pgtype.Timestamptz
+	SubExpiresAt pgtype.Timestamptz
 	Status         pgtype.Int4
 	LastLoginAt    pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
@@ -1135,7 +1135,7 @@ func (q *Queries) GetUserByAPIKey(ctx context.Context, keyString string) (GetUse
 		&i.CashBalance,
 		&i.GrantBalance,
 		&i.UserTier,
-		&i.GrantExpiresAt,
+		&i.SubExpiresAt,
 		&i.Status,
 		&i.LastLoginAt,
 		&i.CreatedAt,
@@ -1154,7 +1154,7 @@ func (q *Queries) GetUserByAPIKey(ctx context.Context, keyString string) (GetUse
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, nickname, avatar_url, cash_balance, grant_balance, tier_level, grant_expires_at, status, last_login_at, created_at FROM users WHERE id = $1 LIMIT 1
+SELECT id, email, password_hash, nickname, avatar_url, cash_balance, grant_balance, tier_level, sub_expires_at, status, last_login_at, created_at FROM users WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
@@ -1169,7 +1169,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 		&i.CashBalance,
 		&i.GrantBalance,
 		&i.TierLevel,
-		&i.GrantExpiresAt,
+		&i.SubExpiresAt,
 		&i.Status,
 		&i.LastLoginAt,
 		&i.CreatedAt,
@@ -1178,7 +1178,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 }
 
 const getUserByIDForUpdate = `-- name: GetUserByIDForUpdate :one
-SELECT id, email, password_hash, nickname, avatar_url, cash_balance, grant_balance, tier_level, grant_expires_at, status, last_login_at, created_at FROM users WHERE id = $1 FOR UPDATE
+SELECT id, email, password_hash, nickname, avatar_url, cash_balance, grant_balance, tier_level, sub_expires_at, status, last_login_at, created_at FROM users WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id int32) (User, error) {
@@ -1193,7 +1193,7 @@ func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id int32) (User, err
 		&i.CashBalance,
 		&i.GrantBalance,
 		&i.TierLevel,
-		&i.GrantExpiresAt,
+		&i.SubExpiresAt,
 		&i.Status,
 		&i.LastLoginAt,
 		&i.CreatedAt,
@@ -2299,7 +2299,7 @@ const updateUserSubBalance = `-- name: UpdateUserSubBalance :exec
 UPDATE users
 SET
     grant_balance = $2,
-    grant_expires_at = $3,
+    sub_expires_at = $3,
     tier_level = $4
 WHERE
     id = $1
@@ -2308,7 +2308,7 @@ WHERE
 type UpdateUserSubBalanceParams struct {
 	ID             int32
 	GrantBalance   pgtype.Int8
-	GrantExpiresAt pgtype.Timestamptz
+	SubExpiresAt pgtype.Timestamptz
 	TierLevel      pgtype.Int4
 }
 
@@ -2316,7 +2316,7 @@ func (q *Queries) UpdateUserSubBalance(ctx context.Context, arg UpdateUserSubBal
 	_, err := q.db.Exec(ctx, updateUserSubBalance,
 		arg.ID,
 		arg.GrantBalance,
-		arg.GrantExpiresAt,
+		arg.SubExpiresAt,
 		arg.TierLevel,
 	)
 	return err
