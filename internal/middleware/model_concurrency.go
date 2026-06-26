@@ -58,11 +58,13 @@ func acquireModelConcurrencySlot(ctx context.Context, modelName string, limit in
 
 func refundPreDeduction(ctx context.Context, queries *db.Queries, userID int32) {
 	preDeducted, _ := ctx.Value(reqctx.KeyPreDeductedCents).(int64)
+	subPaidDeducted, _ := ctx.Value(reqctx.KeySubPaidDeducted).(int64)
 	grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
 	cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
 	reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
 	if preDeducted > 0 {
-		billing.Refund(context.Background(), queries, userID, preDeducted, grantDeducted, cashDeducted, reqID)
+		billing.Refund(context.Background(), queries, userID, preDeducted,
+			billing.Deduction{SubPaid: subPaidDeducted, Grant: grantDeducted, Cash: cashDeducted}, reqID)
 	}
 }
 

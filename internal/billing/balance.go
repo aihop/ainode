@@ -8,33 +8,29 @@ import (
 	"aihop.io/ainode/internal/db"
 )
 
-// GetUserBalance 返回用户当前的 grant/cash 余额（10^8 放大的整数）。
+// GetUserBalance 返回用户三池余额 sub_paid / grant / cash（10^8 放大的整数）。
 //
 // 优先读 Redis 实时缓存——它反映每次请求即时扣减后的真实可用余额；
-// 任一余额缓存缺失/不可用时回源 DB（GetUserByID），并顺带回填缓存。
-func GetUserBalance(ctx context.Context, queries *db.Queries, userID int32) (grant int64, cash int64, err error) {
-	grantKey := fmt.Sprintf("grant_balance:%d", userID)
-	cashKey := fmt.Sprintf("cash_balance:%d", userID)
-
+// 任一池缓存缺失/不可用时回源 DB，并顺带回填缓存。
+func GetUserBalance(ctx context.Context, queries *db.Queries, userID int32) (subPaid int64, grant int64, cash int64, err error) {
 	if RedisClient != nil {
-		if vals, gerr := RedisClient.MGet(ctx, grantKey, cashKey).Result(); gerr == nil &&
-			len(vals) == 2 && vals[0] != nil && vals[1] != nil {
-			g, e1 := strconv.ParseInt(fmt.Sprint(vals[0]), 10, 64)
-			c, e2 := strconv.ParseInt(fmt.Sprint(vals[1]), 10, 64)
-			if e1 == nil && e2 == nil {
-				return g, c, nil
+		if vals, gerr := RedisClient.MGet(ctx, SubPaidBalanceKey(userID), GrantBalanceKey(userID), CashBalanceKey(userID)).Result(); gerr == nil &&
+			len(vals) == 3 && vals[0] != nil && vals[1] != nil && vals[2] != nil {
+			p, e1 := strconv.ParseInt(fmt.Sprint(vals[0]), 10, 64)
+			g, e2 := strconv.ParseInt(fmt.Sprint(vals[1]), 10, 64)
+			c, e3 := strconv.ParseInt(fmt.Sprint(vals[2]), 10, 64)
+			if e1 == nil && e2 == nil && e3 == nil {
+				return p, g, c, nil
 			}
 		}
 	}
 
 	// 缓存缺失/不可用 → 回源 DB
-	user, derr := queries.GetUserByID(ctx, userID)
+	subPaid, grant, cash, derr := queries.GetUserBalances(ctx, userID)
 	if derr != nil {
-		return 0, 0, derr
+		return 0, 0, 0, derr
 	}
-	grant = user.GrantBalance.Int64
-	cash = user.CashBalance.Int64
 	// 顺带回填缓存（失败不影响返回）
-	_ = SyncUserBalanceCache(ctx, userID, grant, cash)
-	return grant, cash, nil
+	_ = SyncUserBalanceCache(ctx, userID, subPaid, grant, cash)
+	return subPaid, grant, cash, nil
 }

@@ -7,24 +7,24 @@ import (
 
 func TestCreditBalanceCache_IncrementsWhenKeyExists(t *testing.T) {
 	mr := newTestRedis(t)
-	setBalances(t, 1, 100, 200) // grant=100, cash=200
+	setBalances(t, 1, 0, 100, 200) // sub_paid=0, grant=100, cash=200
 
 	// credit cash +50
 	if err := CreditBalanceCache(context.Background(), 1, "cash", 50); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assertBalances(t, mr, 100, 250)
+	assertBalances(t, mr, 0, 100, 250)
 
 	// debit grant -30 (delta 为负)
 	if err := CreditBalanceCache(context.Background(), 1, "grant", -30); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assertBalances(t, mr, 70, 250)
+	assertBalances(t, mr, 0, 70, 250)
 }
 
 func TestCreditBalanceCache_ComposesWithConcurrentDeduction(t *testing.T) {
 	mr := newTestRedis(t)
-	setBalances(t, 1, 0, 100) // cash=100
+	setBalances(t, 1, 0, 0, 100) // cash=100
 
 	// 模拟请求侧在途扣减：cash -30 -> 70
 	if err := RedisClient.DecrBy(context.Background(), "cash_balance:1", 30).Err(); err != nil {
@@ -35,7 +35,7 @@ func TestCreditBalanceCache_ComposesWithConcurrentDeduction(t *testing.T) {
 		t.Fatalf("credit failed: %v", err)
 	}
 	// 期望 100 - 30 + 50 = 120；若用绝对 SET 会变成 150（丢掉 -30 的扣减）
-	assertBalances(t, mr, 0, 120)
+	assertBalances(t, mr, 0, 0, 120)
 }
 
 func TestCreditBalanceCache_SkipsWhenKeyMissing(t *testing.T) {

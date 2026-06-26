@@ -1,6 +1,7 @@
 # AI Node: 高性能 AI 模型网关与计费系统
 
 > **变更日志 (Changelog)**
+> `2026-06-27`: 订阅三池计费落地。新增「订阅实付」池 `users.sub_paid_balance`(+`sub_expires_at`),`grant_balance` 复用为订阅赠送,消费顺序 sub_paid→grant→cash。预扣/退款/补扣 Lua 改三池(逆序退款、正序补扣、下限保护),结算与 Worker 按三池拆分(`splitActual3`),钱包接口返回三池明细。新增统一状态机 `billing.ApplySubscription`(订阅/续费/升级/降级/取消/过期同一入口:旧实付剩余→cash、赠送清零、覆盖新额度,event_id 幂等),接入 webhook 事件 `subscription.apply`/`subscription.cancel`,并加每日订阅过期清理兜底。设计见 docs/ai/subscription-3pool-design.md。
 > `2026-06-27`: 修复 webhook 充值只写 `transactions` 漏写 `balance_logs`，导致「资金/余额流水」看不到 webhook 入账；现 `processTransaction` 同事务补写 balance_logs，与管理员直充口径一致，见 Section 8.3.1。webhook 路由对齐 `/api/*` 命名：新增 `/api/webhooks/events`，旧 `/internal/webhooks/events` 过渡期双注册。性能:`pgxpool` 显式配置连接池(默认 MaxConns=20)、新增 `api_keys(user_id,created_at)` 与 `billing_logs(user_id,created_at)` 索引、admin 用户汇总拆为 `/api/admin/users/summary`。
 > `2026-06-27`: 修复缓存计价少收：无缓存明细时 prompt 按 `input_price_cents`（而非 cacheMiss=0），cacheMiss 未配回退 inputPrice；`multiplier<=0` 按 1 处理防白嫖；结算计价抽成纯函数 `proxy/pricing.go::computeActualCost` 并加单测；模型并发占位 TTL 2m→15m 防长流式中途丢槽，见 Section 4.1.2 / 4.1.3。
 > `2026-06-27`: 新增独立钱包接口 `GET /api/site/wallet`（进账 funded / 用了 spent / 还剩 available + 现金/赠金明细），dashboard 移除钱包块回归活动概览，stats 去除重复的累计消耗（累计消耗唯一出口为 wallet.spent），见 Section 2 与 Section 6。

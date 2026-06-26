@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 
 	"aihop.io/ainode/internal/billing"
@@ -52,6 +53,7 @@ func (h *GatewayHandler) CreateVideoGenerationTask(w http.ResponseWriter, r *htt
 	}
 
 	preDeducted, _ := ctx.Value(reqctx.KeyPreDeductedCents).(int64)
+	subPaidDeducted, _ := ctx.Value(reqctx.KeySubPaidDeducted).(int64)
 	grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
 	cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
 	requestID, _ := ctx.Value(reqctx.KeyRequestID).(string)
@@ -82,6 +84,12 @@ func (h *GatewayHandler) CreateVideoGenerationTask(w http.ResponseWriter, r *htt
 	if err != nil {
 		utils.WriteOpenAIError(w, http.StatusInternalServerError, "Failed to create task", "server_error", "")
 		return
+	}
+	// 记录预扣中来自订阅实付池的金额(失败/取消时按池退回)。失败不阻塞任务,仅影响退款精度。
+	if subPaidDeducted > 0 {
+		if err := h.queries.SetAsyncTaskSubPaidDeducted(ctx, task.ID, subPaidDeducted); err != nil {
+			log.Printf("WARN: failed to persist sub_paid_deducted for async task %s: %v", task.ID, err)
+		}
 	}
 
 	ch, err := channel.GlobalManager.GetNextChannelForCapabilities(req.Model, provider.ProviderCapabilities{
@@ -237,7 +245,7 @@ func (h *GatewayHandler) CancelTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if task.PreDeductedCents > 0 && task.ActualCostCents == 0 {
-		billing.Refund(ctx, h.queries, task.UserID, task.PreDeductedCents, task.GrantDeducted, task.CashDeducted, task.RequestID)
+		billing.Refund(ctx, h.queries, task.UserID, task.PreDeductedCents, billing.Deduction{SubPaid: h.subPaidOf(ctx, task.ID), Grant: task.GrantDeducted, Cash: task.CashDeducted}, task.RequestID)
 	}
 
 	writeJSON(w, http.StatusOK, taskResponse(task))
@@ -283,6 +291,15 @@ func (h *GatewayHandler) refreshTaskStatus(ctx context.Context, task db.AsyncTas
 	return task, nil
 }
 
+// subPaidOf 读取异步任务预扣中来自 sub_paid 池的金额(读失败按 0,不阻塞退款/结算)。
+func (h *GatewayHandler) subPaidOf(ctx context.Context, taskID string) int64 {
+	v, err := h.queries.GetAsyncTaskSubPaidDeducted(ctx, taskID)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
 func (h *GatewayHandler) finalizeTerminalTask(ctx context.Context, task db.AsyncTask, payload map[string]any) db.AsyncTask {
 	switch task.Status {
 	case "succeeded":
@@ -299,6 +316,7 @@ func (h *GatewayHandler) finalizeTerminalTask(ctx context.Context, task db.Async
 			CacheHitTokens:   0,
 			CacheMissTokens:  0,
 			PreDeductedCents: task.PreDeductedCents,
+			SubPaidDeducted:  h.subPaidOf(ctx, task.ID),
 			GrantDeducted:    task.GrantDeducted,
 			CashDeducted:     task.CashDeducted,
 			ActualCostCents:  actualCost,
@@ -317,7 +335,7 @@ func (h *GatewayHandler) finalizeTerminalTask(ctx context.Context, task db.Async
 		}
 	case "failed", "canceled":
 		if task.PreDeductedCents > 0 && task.ActualCostCents == 0 {
-			billing.Refund(ctx, h.queries, task.UserID, task.PreDeductedCents, task.GrantDeducted, task.CashDeducted, task.RequestID)
+			billing.Refund(ctx, h.queries, task.UserID, task.PreDeductedCents, billing.Deduction{SubPaid: h.subPaidOf(ctx, task.ID), Grant: task.GrantDeducted, Cash: task.CashDeducted}, task.RequestID)
 		}
 	}
 
@@ -351,7 +369,7 @@ func (h *GatewayHandler) failTaskAndRefund(ctx context.Context, task db.AsyncTas
 	}
 
 	if task.PreDeductedCents > 0 {
-		billing.Refund(ctx, h.queries, task.UserID, task.PreDeductedCents, task.GrantDeducted, task.CashDeducted, task.RequestID)
+		billing.Refund(ctx, h.queries, task.UserID, task.PreDeductedCents, billing.Deduction{SubPaid: h.subPaidOf(ctx, task.ID), Grant: task.GrantDeducted, Cash: task.CashDeducted}, task.RequestID)
 	}
 	return task
 }

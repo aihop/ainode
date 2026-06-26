@@ -9,8 +9,12 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
+	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/config"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type eventEnvelope struct {
@@ -86,6 +90,10 @@ func (h *Handler) HandleEvent(w http.ResponseWriter, r *http.Request) {
 	switch envelope.Event {
 	case "order.paid":
 		h.handleOrderPaidEvent(w, r, envelope)
+	case "subscription.apply":
+		h.handleSubscriptionApply(w, r, envelope)
+	case "subscription.cancel":
+		h.handleSubscriptionCancel(w, r, envelope)
 	default:
 		jsonResponse(w, http.StatusOK, map[string]any{
 			"message": "Event ignored",
@@ -93,6 +101,91 @@ func (h *Handler) HandleEvent(w http.ResponseWriter, r *http.Request) {
 			"event":   envelope.Event,
 		})
 	}
+}
+
+type subscriptionApplyData struct {
+	UserID      int32   `json:"userId"`
+	EventID     string  `json:"eventId"`
+	PaidAmount  float64 `json:"paidAmount"`
+	GrantAmount float64 `json:"grantAmount"`
+	ExpiresAt   string  `json:"expiresAt"`
+	Tier        int32   `json:"tier"`
+	SourceID    string  `json:"sourceId"`
+	Remark      string  `json:"remark"`
+}
+
+func (h *Handler) handleSubscriptionApply(w http.ResponseWriter, r *http.Request, envelope eventEnvelope) {
+	var d subscriptionApplyData
+	if err := json.Unmarshal(envelope.Data, &d); err != nil {
+		errorResponse(w, http.StatusBadRequest, "Invalid subscription.apply payload")
+		return
+	}
+	if d.UserID <= 0 || strings.TrimSpace(d.EventID) == "" {
+		errorResponse(w, http.StatusBadRequest, "Missing userId or eventId")
+		return
+	}
+
+	var expires pgtype.Timestamptz
+	if s := strings.TrimSpace(d.ExpiresAt); s != "" {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			expires = pgtype.Timestamptz{Time: t, Valid: true}
+		}
+	}
+
+	applied, err := billing.ApplySubscription(r.Context(), h.pool, h.queries, billing.SubscriptionApply{
+		UserID:     d.UserID,
+		NewPaid:    moneyToScaledInt(d.PaidAmount),
+		NewGrant:   moneyToScaledInt(d.GrantAmount),
+		ExpiresAt:  expires,
+		Tier:       d.Tier,
+		EventID:    d.EventID,
+		Type:       "sub_apply",
+		SourceType: "apayshop",
+		SourceID:   d.SourceID,
+		Remark:     d.Remark,
+	})
+	if err != nil {
+		errorResponse(w, http.StatusInternalServerError, "Failed to apply subscription: "+err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{"applied": applied, "alreadyProcessed": !applied})
+}
+
+type subscriptionCancelData struct {
+	UserID   int32  `json:"userId"`
+	EventID  string `json:"eventId"`
+	SourceID string `json:"sourceId"`
+	Remark   string `json:"remark"`
+}
+
+func (h *Handler) handleSubscriptionCancel(w http.ResponseWriter, r *http.Request, envelope eventEnvelope) {
+	var d subscriptionCancelData
+	if err := json.Unmarshal(envelope.Data, &d); err != nil {
+		errorResponse(w, http.StatusBadRequest, "Invalid subscription.cancel payload")
+		return
+	}
+	if d.UserID <= 0 || strings.TrimSpace(d.EventID) == "" {
+		errorResponse(w, http.StatusBadRequest, "Missing userId or eventId")
+		return
+	}
+
+	applied, err := billing.ApplySubscription(r.Context(), h.pool, h.queries, billing.SubscriptionApply{
+		UserID:     d.UserID,
+		NewPaid:    0,
+		NewGrant:   0,
+		ExpiresAt:  pgtype.Timestamptz{},
+		Tier:       0,
+		EventID:    d.EventID,
+		Type:       "sub_cancel",
+		SourceType: "apayshop",
+		SourceID:   d.SourceID,
+		Remark:     d.Remark,
+	})
+	if err != nil {
+		errorResponse(w, http.StatusInternalServerError, "Failed to cancel subscription: "+err.Error())
+		return
+	}
+	jsonResponse(w, http.StatusOK, map[string]any{"applied": applied, "alreadyProcessed": !applied})
 }
 
 func (h *Handler) handleOrderPaidEvent(w http.ResponseWriter, r *http.Request, envelope eventEnvelope) {

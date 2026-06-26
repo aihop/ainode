@@ -1,38 +1,29 @@
--- KEYS[1]: 订阅余额Key (grant_balance:user_id)
--- KEYS[2]: 充值余额Key (cash_balance:user_id)
--- ARGV[1]: 需要退还的金额 (amount_cents)
--- ARGV[2]: 当初扣款时，从订阅池扣了多少 (grant_deducted)
+-- 三池退款：按消费逆序退回 cash → grant → sub_paid，各池最多退回其当初扣额。
+-- KEYS[1]=sub_paid_balance:uid  KEYS[2]=grant_balance:uid  KEYS[3]=cash_balance:uid
+-- ARGV[1]=refund_amount
+-- ARGV[2]=sub_paid_deducted  ARGV[3]=grant_deducted  ARGV[4]=cash_deducted
+-- 逆序退：尽量把「可退的现金」留给用户。
 
-local grant_key = KEYS[1]
-local cash_key = KEYS[2]
-local refund_amount = tonumber(ARGV[1])
-local grant_deducted = tonumber(ARGV[2])
-
-if refund_amount <= 0 then
+local amt = tonumber(ARGV[1])
+if not amt or amt <= 0 then
     return 1
 end
+local pd = tonumber(ARGV[2]) or 0
+local gd = tonumber(ARGV[3]) or 0
+local cd = tonumber(ARGV[4]) or 0
 
--- 优先退还到充值余额（因为充值余额不过期，对用户最有利）
--- 假设本次请求总共退款 X。
--- 我们当初扣款的总金额 = cost。
--- 其中从订阅扣了 S，从充值扣了 T (cost = S + T)。
--- 退款时，最多只能往充值池里退回 T，剩下的 (X - T) 退回订阅池。
-
-local cash_deducted = tonumber(ARGV[3]) -- 当初扣款时，从充值池扣了多少
-
-if cash_deducted > 0 then
-    if refund_amount <= cash_deducted then
-        -- 充值池扣的钱够退
-        redis.call("INCRBY", cash_key, refund_amount)
-    else
-        -- 充值池全退，剩下的退回订阅池
-        redis.call("INCRBY", cash_key, cash_deducted)
-        local remain_refund = refund_amount - cash_deducted
-        redis.call("INCRBY", grant_key, remain_refund)
+local rem = amt
+local function give(key, cap)
+    if cap <= 0 or rem <= 0 then
+        return
     end
-else
-    -- 当初全是从订阅池扣的，直接全退给订阅池
-    redis.call("INCRBY", grant_key, refund_amount)
+    local t = cap
+    if t > rem then t = rem end
+    redis.call("INCRBY", key, t)
+    rem = rem - t
 end
 
+give(KEYS[3], cd) -- 先退 cash
+give(KEYS[2], gd) -- 再退 grant
+give(KEYS[1], pd) -- 最后退 sub_paid
 return 1

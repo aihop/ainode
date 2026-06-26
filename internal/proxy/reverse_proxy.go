@@ -231,8 +231,10 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 		upstreamModelName, _ := ctx.Value(reqctx.KeyUpstreamModelName).(string)
 		reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
 		preDeductedCents, _ := ctx.Value(reqctx.KeyPreDeductedCents).(int64)
+		subPaidDeducted, _ := ctx.Value(reqctx.KeySubPaidDeducted).(int64)
 		grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
 		cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
+		prededuction := billing.Deduction{SubPaid: subPaidDeducted, Grant: grantDeducted, Cash: cashDeducted}
 		promptTokens, _ := ctx.Value(reqctx.KeyPromptTokens).(int)
 		requestType, _ := ctx.Value(reqctx.KeyRequestType).(string)
 		billingUnits, _ := ctx.Value(reqctx.KeyBillingUnits).(int64)
@@ -265,7 +267,7 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			if preDeductedCents > 0 {
 				log.Printf("Upstream error %d from channel %d, refunding...", resp.StatusCode, channelID)
 				rctx, rcancel := newBillingWriteCtx()
-				billing.Refund(rctx, queries, userID, preDeductedCents, grantDeducted, cashDeducted, reqID)
+				billing.Refund(rctx, queries, userID, preDeductedCents, prededuction, reqID)
 				rcancel()
 			}
 			// 监控埋点：记录失败请求
@@ -335,6 +337,7 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				CacheHitTokens:   int32(cacheHitTokens),
 				CacheMissTokens:  int32(cacheMissTokens),
 				PreDeductedCents: preDeductedCents,
+				SubPaidDeducted:  subPaidDeducted,
 				GrantDeducted:    grantDeducted,
 				CashDeducted:     cashDeducted,
 				ActualCostCents:  actualCost,
@@ -405,7 +408,7 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				log.Printf("Failed to read non-stream response body for settlement (req %s): %v, refunding pre-deduct", reqID, err)
 				if preDeductedCents > 0 {
 					nctx, ncancel := newBillingWriteCtx()
-					billing.Refund(nctx, queries, userID, preDeductedCents, grantDeducted, cashDeducted, reqID)
+					billing.Refund(nctx, queries, userID, preDeductedCents, prededuction, reqID)
 					ncancel()
 				}
 			}
@@ -433,12 +436,14 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			if isBillingRoute {
 				userID, _ := ctx.Value(reqctx.KeyUserID).(int32)
 				preDeductedCents, _ := ctx.Value(reqctx.KeyPreDeductedCents).(int64)
+				subPaidDeducted, _ := ctx.Value(reqctx.KeySubPaidDeducted).(int64)
 				grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
 				cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
 				reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
 				if preDeductedCents > 0 {
 					ectx, ecancel := newBillingWriteCtx()
-					billing.Refund(ectx, queries, userID, preDeductedCents, grantDeducted, cashDeducted, reqID)
+					billing.Refund(ectx, queries, userID, preDeductedCents,
+						billing.Deduction{SubPaid: subPaidDeducted, Grant: grantDeducted, Cash: cashDeducted}, reqID)
 					ecancel()
 				}
 			}

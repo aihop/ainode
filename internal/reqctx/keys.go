@@ -19,6 +19,7 @@ const (
 	KeyRequestType       Key = "request_type"
 	KeyPromptTokens      Key = "prompt_tokens"
 	KeyPreDeductedCents  Key = "pre_deducted_cents"
+	KeySubPaidDeducted   Key = "sub_paid_deducted"
 	KeyGrantDeducted     Key = "grant_deducted"
 	KeyCashDeducted      Key = "cash_deducted"
 	KeyBillingUnits      Key = "billing_units"

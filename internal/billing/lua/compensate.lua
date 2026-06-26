@@ -1,44 +1,36 @@
--- 补扣脚本：当结算实际金额 > 预扣金额（diff < 0）时，原子地补扣差额。
--- KEYS[1]: 订阅余额Key (grant_balance:user_id)
--- KEYS[2]: 充值余额Key (cash_balance:user_id)
--- ARGV[1]: 需要补扣的差额 (extra_cents, > 0)
--- ARGV[2]: 计费策略 (both | cash_only | grant_only)
--- 返回: {从grant补扣, 从cash补扣}
---
--- 设计：
---   * 与预扣顺序一致（both 时先扣 grant 再扣 cash）；
---   * 以当前余额为下限，最多扣到 0，绝不把余额扣成负数；
---   * 补扣不足的部分视为坏账放弃（该路径理论上极少发生），优先保证余额一致性。
+-- 三池补扣：结算实际 > 预扣（diff<0）时按消费正序补扣 sub_paid → grant → cash。
+-- KEYS[1]=sub_paid_balance:uid  KEYS[2]=grant_balance:uid  KEYS[3]=cash_balance:uid
+-- ARGV[1]=amount(>0)  ARGV[2]=policy(all|cash_only|grant_only)
+-- 返回 {sub_paid_taken, grant_taken, cash_taken}
+-- 以各池当前余额为下限，最多扣到 0(绝不为负);不足部分视为坏账放弃(极少发生)。
 
-local grant_key = KEYS[1]
-local cash_key = KEYS[2]
 local amount = tonumber(ARGV[1])
-local policy = ARGV[2] or "both"
-
 if not amount or amount <= 0 then
-    return {0, 0}
+    return {0, 0, 0}
 end
+local policy = ARGV[2] or "all"
 
-local grant_bal = tonumber(redis.call("GET", grant_key) or "0")
-local cash_bal = tonumber(redis.call("GET", cash_key) or "0")
+local sp = tonumber(redis.call("GET", KEYS[1]) or "0")
+local gr = tonumber(redis.call("GET", KEYS[2]) or "0")
+local ca = tonumber(redis.call("GET", KEYS[3]) or "0")
 
-local function take(key, bal, want)
-    local t = math.min(bal, want)
-    if t > 0 then
-        redis.call("DECRBY", key, t)
+local use_sub_paid = policy ~= "cash_only"
+local use_grant = policy ~= "cash_only"
+local use_cash = policy ~= "grant_only"
+
+local rem = amount
+local function take(key, bal, enabled)
+    if not enabled or bal <= 0 or rem <= 0 then
+        return 0
     end
+    local t = bal
+    if t > rem then t = rem end
+    redis.call("DECRBY", key, t)
+    rem = rem - t
     return t
 end
 
-if policy == "grant_only" then
-    return {take(grant_key, grant_bal, amount), 0}
-end
-
-if policy == "cash_only" then
-    return {0, take(cash_key, cash_bal, amount)}
-end
-
--- both: 先扣订阅，剩余再扣充值
-local g = take(grant_key, grant_bal, amount)
-local c = take(cash_key, cash_bal, amount - g)
-return {g, c}
+local p = take(KEYS[1], sp, use_sub_paid)
+local g = take(KEYS[2], gr, use_grant)
+local c = take(KEYS[3], ca, use_cash)
+return {p, g, c}

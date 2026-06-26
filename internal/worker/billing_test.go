@@ -2,26 +2,26 @@ package worker
 
 import "testing"
 
-func TestSplitActualDeduction(t *testing.T) {
+func TestSplitActual3(t *testing.T) {
 	cases := []struct {
-		name          string
-		actualCost    int64
-		grantDeducted int64
-		wantGrant     int64
-		wantCash      int64
+		name                   string
+		actual, sp, gr, ca     int64
+		wantSP, wantGR, wantCA int64
 	}{
-		{"fully within grant", 40, 100, 40, 0},
-		{"exactly equals grant", 100, 100, 100, 0},
-		{"spills to cash", 120, 100, 100, 20},
-		{"no grant deducted -> all cash", 50, 0, 0, 50},
-		{"zero cost", 0, 100, 0, 0},
+		{"within sub_paid", 40, 100, 50, 50, 40, 0, 0},
+		{"cascade to grant", 80, 30, 100, 50, 30, 50, 0},
+		{"cascade through all", 80, 30, 30, 100, 30, 30, 20},
+		{"no sub_paid -> grant then cash", 80, 0, 30, 100, 0, 30, 50},
+		{"all cash", 50, 0, 0, 100, 0, 0, 50},
+		{"zero cost", 0, 100, 100, 100, 0, 0, 0},
+		{"exactly sub_paid", 30, 30, 50, 50, 30, 0, 0},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			g, cash := splitActualDeduction(c.actualCost, c.grantDeducted)
-			if g != c.wantGrant || cash != c.wantCash {
-				t.Fatalf("split(%d,%d) = grant %d/cash %d, want %d/%d",
-					c.actualCost, c.grantDeducted, g, cash, c.wantGrant, c.wantCash)
+			sp, gr, ca := splitActual3(c.actual, c.sp, c.gr, c.ca)
+			if sp != c.wantSP || gr != c.wantGR || ca != c.wantCA {
+				t.Fatalf("split3(%d, sp=%d gr=%d ca=%d) = %d/%d/%d, want %d/%d/%d",
+					c.actual, c.sp, c.gr, c.ca, sp, gr, ca, c.wantSP, c.wantGR, c.wantCA)
 			}
 		})
 	}

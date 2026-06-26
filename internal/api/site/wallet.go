@@ -25,14 +25,14 @@ func (h *InternalHandler) WalletHandler(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	eg, egCtx := errgroup.WithContext(ctx)
 
-	var grantBalance, cashBalance int64
+	var subPaidBalance, grantBalance, cashBalance int64
 	var totalSpend int64
 	var totalFunded int64
 
 	eg.Go(func() error {
 		// 还剩：优先 Redis 实时余额，缺失回源 DB。
-		if g, c, berr := billing.GetUserBalance(egCtx, h.queries, int32(userID)); berr == nil {
-			grantBalance, cashBalance = g, c
+		if p, g, c, berr := billing.GetUserBalance(egCtx, h.queries, int32(userID)); berr == nil {
+			subPaidBalance, grantBalance, cashBalance = p, g, c
 		}
 		return nil
 	})
@@ -55,7 +55,7 @@ func (h *InternalHandler) WalletHandler(w http.ResponseWriter, r *http.Request) 
 
 	_ = eg.Wait() // 各子查询失败均已降级为 0，不阻断整体返回
 
-	available := cashBalance + grantBalance
+	available := subPaidBalance + grantBalance + cashBalance
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"code": 0,
@@ -66,13 +66,15 @@ func (h *InternalHandler) WalletHandler(w http.ResponseWriter, r *http.Request) 
 			"fundedCents":    totalFunded,
 			"spent":          centsToMoneyPrecise(totalSpend), // 用了
 			"spentCents":     totalSpend,
-			"available":      centsToMoneyPrecise(available), // 还剩
+			"available":      centsToMoneyPrecise(available), // 还剩(三池之和)
 			"availableCents": available,
-			// 余额明细
-			"cash":       centsToMoneyPrecise(cashBalance),
-			"cashCents":  cashBalance,
-			"grant":      centsToMoneyPrecise(grantBalance),
-			"grantCents": grantBalance,
+			// 余额明细(消费顺序:订阅实付 → 订阅赠送 → 充值)
+			"subPaid":      centsToMoneyPrecise(subPaidBalance),
+			"subPaidCents": subPaidBalance,
+			"grant":        centsToMoneyPrecise(grantBalance),
+			"grantCents":   grantBalance,
+			"cash":         centsToMoneyPrecise(cashBalance),
+			"cashCents":    cashBalance,
 		},
 	})
 }

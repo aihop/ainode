@@ -227,6 +227,12 @@ CREATE TABLE IF NOT EXISTS model_failure_logs (
 );
 
 -- 添加索引
+-- 订阅三池:新增「订阅实付」池 sub_paid_balance(10^8 放大),消费序最高;
+-- grant_balance 复用为「订阅赠送」,cash_balance 为充值余额。sub_expires_at 为本订阅周期到期。
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_paid_balance BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_expires_at TIMESTAMP WITH TIME ZONE;
+CREATE INDEX IF NOT EXISTS idx_users_sub_expires_at ON users (sub_expires_at) WHERE sub_expires_at IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_api_keys_key_string ON api_keys (key_string);
 
 -- api_keys 大量按 user_id 过滤（活跃 Key 计数、用户 Key 列表、admin 按用户聚合），
@@ -239,6 +245,9 @@ CREATE INDEX IF NOT EXISTS idx_billing_user_id ON billing_logs (user_id);
 
 -- 用户侧统计/账单/仪表盘均按 (user_id, created_at) 过滤，组合索引避免单列索引 + 过滤
 CREATE INDEX IF NOT EXISTS idx_billing_user_created_at ON billing_logs (user_id, created_at DESC);
+
+-- 异步任务也纳入三池:记录预扣中来自订阅实付池的金额,失败/取消退款时正确退回 sub_paid。
+ALTER TABLE async_tasks ADD COLUMN IF NOT EXISTS sub_paid_deducted BIGINT NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_async_tasks_user_created_at ON async_tasks (user_id, created_at DESC);
 

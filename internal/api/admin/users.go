@@ -386,16 +386,10 @@ func (h *AdminHandler) AdjustUserBalance(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	newCashBalance := beforeCash
-	newGrantBalance := beforeGrant
-	if req.BalanceType == "grant" {
-		newGrantBalance = afterBalance
-	} else {
-		newCashBalance = afterBalance
-	}
-
+	// 用相对增减(INCRBY)同步缓存:只动被调整的那个池(cash/grant),不覆盖 sub_paid 等其它池,
+	// 也避免用绝对值覆盖掉在途扣减。
 	cacheSynced := true
-	if err := billing.SyncUserBalanceCache(ctx, int32(id), newGrantBalance, newCashBalance); err != nil {
+	if err := billing.CreditBalanceCache(ctx, int32(id), req.BalanceType, scaledAmount); err != nil {
 		cacheSynced = false
 	}
 

@@ -121,6 +121,9 @@ func main() {
 	// 启动结算 outbox relay：兜底重投因 asynq/Redis 故障而落库的结算，确保账单不丢
 	billing.StartOutboxRelay(syncCtx, queries)
 
+	// 启动订阅过期清理：到期未续费/取消的订阅,赠送清零、实付剩余转余额(兜底 use-it-or-lose-it)
+	billing.StartSubscriptionExpirySweep(syncCtx, pool, queries)
+
 	// 5. 初始化并启动 Asynq Worker (后台任务消费者)
 	srvAsynq := asynq.NewServer(
 		asynq.RedisClientOpt{

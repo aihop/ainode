@@ -193,7 +193,7 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			}
 
 			// 5. 调用预扣费 (如果余额不足会返回错误)
-			grantDeducted, cashDeducted, err := billing.PreDeduct(ctx, queries, user.ID, estimatedCostCents, modelInfo.BillingPolicy)
+			deduction, err := billing.PreDeduct(ctx, queries, user.ID, estimatedCostCents, modelInfo.BillingPolicy)
 			if err != nil {
 				logMiddlewareFailure(queries, ctx, http.StatusPaymentRequired, modelName, "billing_error", "insufficient_quota", "Insufficient balance")
 				utils.WriteOpenAIError(w, http.StatusPaymentRequired, "Insufficient balance", "invalid_request_error", "insufficient_quota")
@@ -209,8 +209,9 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			ctx = context.WithValue(ctx, reqctx.KeyRequestType, requestType)
 			ctx = context.WithValue(ctx, reqctx.KeyPromptTokens, promptTokens)
 			ctx = context.WithValue(ctx, reqctx.KeyPreDeductedCents, estimatedCostCents)
-			ctx = context.WithValue(ctx, reqctx.KeyGrantDeducted, grantDeducted)
-			ctx = context.WithValue(ctx, reqctx.KeyCashDeducted, cashDeducted)
+			ctx = context.WithValue(ctx, reqctx.KeySubPaidDeducted, deduction.SubPaid)
+			ctx = context.WithValue(ctx, reqctx.KeyGrantDeducted, deduction.Grant)
+			ctx = context.WithValue(ctx, reqctx.KeyCashDeducted, deduction.Cash)
 			ctx = context.WithValue(ctx, reqctx.KeyBillingUnits, billingUnits)
 			ctx = context.WithValue(ctx, reqctx.KeyEstimatedTokens, int64(promptTokens+maxOutputTokens)) // 给 TPM 限流用
 			ctx = context.WithValue(ctx, reqctx.KeyRequestID, reqID)
