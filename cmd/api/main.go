@@ -153,6 +153,17 @@ func main() {
 		MaxAge:           300, // Maximum value not ignored by any of major browsers
 	}))
 
+	// 限流阈值：来自配置（默认已调高），<=0 时回落到安全默认，避免把所有请求挡死
+	rpmLimit := cfg.Server.RPMLimit
+	if rpmLimit <= 0 {
+		rpmLimit = 600
+	}
+	tpmLimit := cfg.Server.TPMLimit
+	if tpmLimit <= 0 {
+		tpmLimit = 2000000
+	}
+	log.Printf("Rate limits per user (60s window): RPM=%d, TPM=%d", rpmLimit, tpmLimit)
+
 	// 核心业务路由组
 	r.Group(func(r chi.Router) {
 		// ==========================
@@ -220,7 +231,7 @@ func main() {
 		// ==========================
 		r.Group(func(asyncRouter chi.Router) {
 			asyncRouter.Use(middleware.AuthAndPreDeductMiddleware(queries))
-			asyncRouter.Use(middleware.RPMAndTPMMiddleware(queries, 60, 100000))
+			asyncRouter.Use(middleware.RPMAndTPMMiddleware(queries, rpmLimit, tpmLimit))
 			asyncRouter.Use(middleware.ModelConcurrencyMiddleware(queries))
 
 			gatewayHandler := gateway.NewGatewayHandler(queries)
@@ -237,7 +248,7 @@ func main() {
 			proxyRouter.Use(middleware.AuthAndPreDeductMiddleware(queries))
 
 			// B. RPM 与 TPM 限流中间件 (例如: 每分钟 60 次请求，每分钟 100,000 Token)
-			proxyRouter.Use(middleware.RPMAndTPMMiddleware(queries, 60, 100000))
+			proxyRouter.Use(middleware.RPMAndTPMMiddleware(queries, rpmLimit, tpmLimit))
 
 			// C. 模型级并发限制，按 models.max_concurrency 控制单模型的全局并发占位
 			proxyRouter.Use(middleware.ModelConcurrencyMiddleware(queries))

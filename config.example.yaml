@@ -1,5 +1,9 @@
 server:
   port: 5900
+  # 每用户滚动 60s 窗口的限流上限。留空/0 使用内置默认（RPM=600, TPM=2000000）。
+  # TPM 按 "prompt + max_tokens 预留" 计，agent 类高频/大上下文场景可继续调高。
+  rpm_limit: 600
+  tpm_limit: 2000000
 
 db:
   dsn: ""

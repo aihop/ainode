@@ -16,6 +16,10 @@ type Config struct {
 
 type ServerConfig struct {
 	Port int `mapstructure:"port"`
+	// RPMLimit / TPMLimit 为每用户滚动 60s 窗口内的请求数 / Token 数上限。
+	// TPM 按「prompt + max_tokens 预留」计，agent 场景应配较高值；<=0 时回落到内置默认。
+	RPMLimit int64 `mapstructure:"rpm_limit"`
+	TPMLimit int64 `mapstructure:"tpm_limit"`
 }
 
 type DBConfig struct {
@@ -47,6 +51,9 @@ func LoadConfig() {
 
 	// Default values
 	viper.SetDefault("server.port", 8080)
+	// 限流默认值（调高以适配 agent 类高频/大上下文场景；可被 config 覆盖）
+	viper.SetDefault("server.rpm_limit", 600)
+	viper.SetDefault("server.tpm_limit", 2000000)
 	viper.SetDefault("db.dsn", "postgres://user:pass@localhost:5432/ainode?sslmode=disable")
 	viper.SetDefault("redis.addr", "localhost:6379")
 	viper.SetDefault("redis.password", "")
