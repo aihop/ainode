@@ -226,7 +226,7 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		var ch *db.Channel
 		var errChan error
 		if requiredCaps.Image || requiredCaps.Video {
-			ch, errChan = channel.GlobalManager.GetNextChannelForCapabilities(publicModelName, requiredCaps)
+			ch, errChan = channel.GlobalManager.GetNextChannelForCapabilitiesExcluding(publicModelName, requiredCaps, attemptedChannels)
 		} else {
 			ch, errChan = channel.GlobalManager.GetNextChannelExcluding(publicModelName, attemptedChannels)
 		}
@@ -537,6 +537,13 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 
 				// 立即触发结算
 				onComplete(pTokens, cTokens, chTokens, cmTokens)
+			} else {
+				// 读取响应体失败：无法计量实际用量。为避免把预扣估算值挂在用户头上，
+				// 这里全额退还预扣费（宁可少收，不可错扣）。
+				log.Printf("Failed to read non-stream response body for settlement (req %s): %v, refunding pre-deduct", reqID, err)
+				if preDeductedCents > 0 {
+					billing.Refund(context.Background(), queries, userID, preDeductedCents, grantDeducted, cashDeducted, reqID)
+				}
 			}
 		}
 		return nil

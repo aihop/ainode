@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"sync"
 
 	"aihop.io/ainode/internal/provider"
 	"github.com/pkoukk/tiktoken-go"
@@ -24,7 +25,7 @@ type TallyReader struct {
 	countedTokens   int
 	cacheHitTokens  int
 	cacheMissTokens int
-	isClosed        bool
+	completeOnce    sync.Once
 	tokenizer       *tiktoken.Tiktoken
 }
 
@@ -55,7 +56,7 @@ func (t *TallyReader) Read(p []byte) (n int, err error) {
 		t.processChunk(chunk)
 	}
 
-	if err == io.EOF && !t.isClosed {
+	if err == io.EOF {
 		t.triggerComplete()
 	}
 	return n, err
@@ -147,15 +148,16 @@ func (t *TallyReader) processChunk(chunk []byte) {
 // Close 实现了 io.Closer 接口。
 // 当客户端断开连接（Context Cancel）导致框架调用 Close 时，能及时止损结算。
 func (t *TallyReader) Close() error {
-	if !t.isClosed {
-		t.triggerComplete()
-	}
+	t.triggerComplete()
 	return t.OriginalBody.Close()
 }
 
+// triggerComplete 用 sync.Once 保证结算回调只触发一次，
+// 避免 Read(EOF) 与 Close(客户端断流) 竞争导致的二次结算/二次退款。
 func (t *TallyReader) triggerComplete() {
-	t.isClosed = true
-	if t.OnComplete != nil {
-		t.OnComplete(t.PromptTokens, t.countedTokens, t.cacheHitTokens, t.cacheMissTokens)
-	}
+	t.completeOnce.Do(func() {
+		if t.OnComplete != nil {
+			t.OnComplete(t.PromptTokens, t.countedTokens, t.cacheHitTokens, t.cacheMissTokens)
+		}
+	})
 }

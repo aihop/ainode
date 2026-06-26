@@ -17,8 +17,13 @@ import (
 var refundLuaScript string
 var refundScript *redis.Script
 
+//go:embed lua/compensate.lua
+var compensateLuaScript string
+var compensateScript *redis.Script
+
 func init() {
 	refundScript = redis.NewScript(refundLuaScript)
+	compensateScript = redis.NewScript(compensateLuaScript)
 }
 
 // TaskRecordBillingLog 是推送到队列的 Task 名称
@@ -79,7 +84,8 @@ func Settle(ctx context.Context, queries *db.Queries, req SettlementRequest) err
 			log.Printf("ERROR: Failed to compensate redis balance for user %d: %v", req.UserID, err)
 		}
 	} else if diff < 0 {
-		// 补扣逻辑：理论上极少发生，优先遵循模型余额策略。
+		// 补扣逻辑：理论上极少发生（预扣按 max_tokens，正常应高于实际）。
+		// 优先遵循模型余额策略，并通过原子 Lua 补扣，带余额下限保护，绝不扣成负数。
 		billingPolicy := "both"
 		if queries != nil {
 			if modelInfo, err := queries.GetModelByName(ctx, req.ModelName); err == nil && modelInfo.BillingPolicy != "" {
@@ -87,13 +93,12 @@ func Settle(ctx context.Context, queries *db.Queries, req SettlementRequest) err
 			}
 		}
 
-		switch billingPolicy {
-		case "grant_only":
-			grantKey := fmt.Sprintf("grant_balance:%d", req.UserID)
-			RedisClient.DecrBy(ctx, grantKey, -diff)
-		default:
-			cashKey := fmt.Sprintf("cash_balance:%d", req.UserID)
-			RedisClient.DecrBy(ctx, cashKey, -diff)
+		grantKey := fmt.Sprintf("grant_balance:%d", req.UserID)
+		cashKey := fmt.Sprintf("cash_balance:%d", req.UserID)
+		keys := []string{grantKey, cashKey}
+		args := []interface{}{-diff, billingPolicy}
+		if err := compensateScript.Run(ctx, RedisClient, keys, args...).Err(); err != nil {
+			log.Printf("ERROR: Failed to compensate(under-charge) redis balance for user %d: %v", req.UserID, err)
 		}
 	}
 

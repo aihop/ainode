@@ -57,6 +57,12 @@ func (m *Manager) GetNextChannelForCapabilities(modelName string, required provi
 	return m.getNextChannel(modelName, required.AsyncTask, required)
 }
 
+// GetNextChannelForCapabilitiesExcluding 在满足能力要求的同时，排除本次请求已失败过的渠道，
+// 避免图片/视频重试时反复选中刚刚失败的同一渠道。
+func (m *Manager) GetNextChannelForCapabilitiesExcluding(modelName string, required provider.ProviderCapabilities, excluded map[int32]struct{}) (*db.Channel, error) {
+	return m.getNextChannel(modelName, required.AsyncTask, required, excluded)
+}
+
 // GetNextChannelExcluding 获取下一个可用渠道，并排除本次请求已经失败过的渠道。
 func (m *Manager) GetNextChannelExcluding(modelName string, excluded map[int32]struct{}) (*db.Channel, error) {
 	return m.getNextChannel(modelName, false, provider.ProviderCapabilities{}, excluded)
