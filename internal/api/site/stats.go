@@ -34,8 +34,17 @@ func respondError(w http.ResponseWriter, status int, message string) {
 }
 
 // 金额转换助手 (将 10^8 的 BIGINT 转为正常的浮点数，如 100.00)
+// 注意：四舍五入到 2 位小数，仅适合余额等较大金额；单次/小额消费请用 centsToMoneyPrecise，
+// 否则不足 0.005 的费用会被抹成 0。
 func centsToMoney(cents int64) float64 {
 	return math.Round(float64(cents)/100000000.0*100) / 100
+}
+
+// centsToMoneyPrecise 高精度金额转换，保留 8 位小数——与 10^8 存储刻度完全对齐，
+// 即原始 amount_cents 的精确十进制表示（如 251109 -> 0.00251109），单次/小额消费不再被抹成 0。
+// 需要绝对精确（累加/对账）时应直接使用原始的 amount_cents 整数。
+func centsToMoneyPrecise(cents int64) float64 {
+	return math.Round(float64(cents)/100000000.0*1e8) / 1e8
 }
 
 func formatUUID(u pgtype.UUID) string {
@@ -132,7 +141,7 @@ func (h *InternalHandler) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	// 4. 组装 APayShop 前端所需的 JSON 结构
 
 	// 计算总金额和订阅/弹性金额占比 (这里假设订阅赠送的金额占比，暂时简单处理)
-	totalCost := centsToMoney(summary.TotalAmount)
+	totalCost := centsToMoneyPrecise(summary.TotalAmount)
 
 	// 构建 TrendSeries
 	type TrendItem struct {
@@ -151,7 +160,7 @@ func (h *InternalHandler) StatsHandler(w http.ResponseWriter, r *http.Request) {
 			Key:      label,
 			Label:    label,
 			Requests: t.RequestCount,
-			Cost:     centsToMoney(t.DailyAmount),
+			Cost:     centsToMoneyPrecise(t.DailyAmount),
 		})
 	}
 
@@ -171,7 +180,7 @@ func (h *InternalHandler) StatsHandler(w http.ResponseWriter, r *http.Request) {
 		models = append(models, ModelStatItem{
 			Name:  m.ModelName,
 			Color: color,
-			Value: centsToMoney(m.TotalAmount),
+			Value: centsToMoneyPrecise(m.TotalAmount),
 		})
 	}
 

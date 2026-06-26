@@ -96,28 +96,30 @@ func (h *InternalHandler) BillingLogsListHandler(w http.ResponseWriter, r *http.
 
 	// 3. 构建返回数据
 	type LogItem struct {
-		ID        string  `json:"id"`
-		Time      string  `json:"time"`
-		Model     string  `json:"model"`
-		Input     int32   `json:"input"`
-		Output    int32   `json:"output"`
-		CacheHit  int32   `json:"cacheHit"`
-		CacheMiss int32   `json:"cacheMiss"`
-		Type      string  `json:"type"`
-		Cost      float64 `json:"cost"`
+		ID          string  `json:"id"`
+		Time        string  `json:"time"`
+		Model       string  `json:"model"`
+		Input       int32   `json:"input"`
+		Output      int32   `json:"output"`
+		CacheHit    int32   `json:"cacheHit"`
+		CacheMiss   int32   `json:"cacheMiss"`
+		Type        string  `json:"type"`
+		Cost        float64 `json:"cost"`        // 高精度金额（8 位小数，与 10^8 刻度对齐），小额也不为 0
+		AmountCents int64   `json:"amountCents"` // 原始整数（10^8 放大），精确账本值，永不丢失
 	}
 	resLogs := make([]LogItem, 0)
 	for _, l := range logs {
 		resLogs = append(resLogs, LogItem{
-			ID:        formatUUID(l.ID),
-			Time:      l.CreatedAt.Time.Format("2006-01-02 15:04:05"),
-			Model:     l.ModelName,
-			Input:     l.PromptTokens.Int32,
-			Output:    l.CompletionTokens.Int32,
-			CacheHit:  l.CacheHitTokens.Int32,
-			CacheMiss: l.CacheMissTokens.Int32,
-			Type:      "flex",
-			Cost:      centsToMoney(l.AmountCents),
+			ID:          formatUUID(l.ID),
+			Time:        l.CreatedAt.Time.Format("2006-01-02 15:04:05"),
+			Model:       l.ModelName,
+			Input:       l.PromptTokens.Int32,
+			Output:      l.CompletionTokens.Int32,
+			CacheHit:    l.CacheHitTokens.Int32,
+			CacheMiss:   l.CacheMissTokens.Int32,
+			Type:        "flex",
+			Cost:        centsToMoneyPrecise(l.AmountCents),
+			AmountCents: l.AmountCents,
 		})
 	}
 
