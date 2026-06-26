@@ -365,6 +365,110 @@ OFFSET
 -- name: CountBillingLogs :one
 SELECT COUNT(*) FROM billing_logs;
 
+-- name: ListUsersForAdmin :many
+WITH user_usage AS (
+    SELECT
+        user_id,
+        COUNT(*)::bigint AS total_requests,
+        COALESCE(SUM(prompt_tokens), 0)::bigint AS total_prompt_tokens,
+        COALESCE(SUM(completion_tokens), 0)::bigint AS total_completion_tokens,
+        COALESCE(SUM(amount_cents), 0)::bigint AS total_amount_cents,
+        MAX(created_at) AS last_request_at
+    FROM billing_logs
+    GROUP BY user_id
+),
+active_keys AS (
+    SELECT
+        user_id,
+        COUNT(*) FILTER (WHERE status = 1)::bigint AS active_key_count
+    FROM api_keys
+    GROUP BY user_id
+)
+SELECT
+    u.id,
+    u.email,
+    COALESCE(u.nickname, '') AS nickname,
+    u.cash_balance,
+    u.grant_balance,
+    u.status,
+    u.created_at,
+    u.last_login_at,
+    COALESCE(user_usage.total_requests, 0)::bigint AS total_requests,
+    COALESCE(user_usage.total_prompt_tokens, 0)::bigint AS total_prompt_tokens,
+    COALESCE(user_usage.total_completion_tokens, 0)::bigint AS total_completion_tokens,
+    COALESCE(user_usage.total_amount_cents, 0)::bigint AS total_amount_cents,
+    user_usage.last_request_at,
+    COALESCE(active_keys.active_key_count, 0)::bigint AS active_key_count
+FROM users u
+LEFT JOIN user_usage ON user_usage.user_id = u.id
+LEFT JOIN active_keys ON active_keys.user_id = u.id
+WHERE
+    (
+        sqlc.arg(keyword)::text = ''
+        OR u.email ILIKE '%' || sqlc.arg(keyword)::text || '%'
+        OR COALESCE(u.nickname, '') ILIKE '%' || sqlc.arg(keyword)::text || '%'
+    )
+ORDER BY COALESCE(user_usage.last_request_at, u.created_at) DESC, u.id DESC
+LIMIT sqlc.arg(limit_val)
+OFFSET sqlc.arg(offset_val);
+
+-- name: CountUsersForAdmin :one
+SELECT COUNT(*)
+FROM users u
+WHERE
+    (
+        sqlc.arg(keyword)::text = ''
+        OR u.email ILIKE '%' || sqlc.arg(keyword)::text || '%'
+        OR COALESCE(u.nickname, '') ILIKE '%' || sqlc.arg(keyword)::text || '%'
+    );
+
+-- name: GetUsersSummaryForAdmin :one
+WITH filtered_users AS (
+    SELECT
+        id,
+        cash_balance,
+        grant_balance,
+        status
+    FROM users u
+    WHERE
+        (
+            sqlc.arg(keyword)::text = ''
+            OR u.email ILIKE '%' || sqlc.arg(keyword)::text || '%'
+            OR COALESCE(u.nickname, '') ILIKE '%' || sqlc.arg(keyword)::text || '%'
+        )
+),
+user_usage AS (
+    SELECT
+        user_id,
+        COUNT(*)::bigint AS total_requests,
+        (
+            COALESCE(SUM(prompt_tokens), 0)::bigint +
+            COALESCE(SUM(completion_tokens), 0)::bigint
+        ) AS total_tokens
+    FROM billing_logs
+    WHERE user_id IN (SELECT id FROM filtered_users)
+    GROUP BY user_id
+),
+active_keys AS (
+    SELECT
+        user_id,
+        COUNT(*) FILTER (WHERE status = 1)::bigint AS active_key_count
+    FROM api_keys
+    WHERE user_id IN (SELECT id FROM filtered_users)
+    GROUP BY user_id
+)
+SELECT
+    COUNT(*)::bigint AS total_users,
+    COUNT(*) FILTER (WHERE COALESCE(filtered_users.status, 0) = 1)::bigint AS active_users,
+    COALESCE(SUM(filtered_users.cash_balance), 0)::bigint AS total_cash_balance,
+    COALESCE(SUM(filtered_users.grant_balance), 0)::bigint AS total_grant_balance,
+    COALESCE(SUM(COALESCE(user_usage.total_requests, 0)), 0)::bigint AS total_requests,
+    COALESCE(SUM(COALESCE(user_usage.total_tokens, 0)), 0)::bigint AS total_tokens,
+    COALESCE(SUM(COALESCE(active_keys.active_key_count, 0)), 0)::bigint AS total_active_keys
+FROM filtered_users
+LEFT JOIN user_usage ON user_usage.user_id = filtered_users.id
+LEFT JOIN active_keys ON active_keys.user_id = filtered_users.id;
+
 -- ==========================================
 -- Internal API Queries (User Dashboard Stats)
 -- ==========================================

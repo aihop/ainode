@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/db"
@@ -37,4 +38,20 @@ func jsonResponse(w http.ResponseWriter, status int, data interface{}) {
 
 func errorResponse(w http.ResponseWriter, status int, message string) {
 	jsonResponse(w, status, map[string]string{"error": message})
+}
+
+func centsToMoney(amount int64) float64 {
+	return float64(amount) / 100000000
+}
+
+func formatTime(value any) string {
+	switch v := value.(type) {
+	case interface{ Value() (time.Time, bool) }:
+		if ts, ok := v.Value(); ok {
+			return ts.UTC().Format(time.RFC3339)
+		}
+	case time.Time:
+		return v.UTC().Format(time.RFC3339)
+	}
+	return ""
 }

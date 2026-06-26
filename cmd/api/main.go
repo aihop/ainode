@@ -154,6 +154,10 @@ func main() {
 
 			// Billing Logs
 			adminRouter.Get("/api/admin/billing_logs", adminHandler.ListBillingLogs)
+
+			// Users
+			adminRouter.Get("/api/admin/users", adminHandler.ListUsers)
+			adminRouter.Post("/api/admin/users/{id}/balance", adminHandler.AdjustUserBalance)
 		})
 
 		// Initialize internal handler
