@@ -93,7 +93,7 @@ func Settle(ctx context.Context, queries *db.Queries, req SettlementRequest) err
 	task := asynq.NewTask(TaskRecordBillingLog, payload)
 
 	// 将任务推送到 asynq 队列，指定队列名称，避免与其他项目冲突
-	info, err := AsynqClient.EnqueueContext(ctx, task, asynq.Queue("datapaas_billing"), asynq.MaxRetry(5))
+	info, err := AsynqClient.EnqueueContext(ctx, task, asynq.Queue("ainode_billing"), asynq.MaxRetry(5))
 	if err != nil {
 		log.Printf("ERROR: Failed to enqueue billing task: %v", err)
 		return err

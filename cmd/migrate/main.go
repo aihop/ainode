@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	dsn := "postgres://datapaas:8kdxEFH8zztfz7QE@192.168.1.117:5432/datapaas?sslmode=disable"
+	dsn := "postgres://ainode:8kdxEFH8zztfz7QE@192.168.1.117:5432/ainode?sslmode=disable"
 	conn, err := pgx.Connect(context.Background(), dsn)
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)

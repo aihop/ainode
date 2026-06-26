@@ -83,7 +83,7 @@ func main() {
 			Concurrency: 10,
 			// 队列优先级
 			Queues: map[string]int{
-				"datapaas_billing": 1,
+				"ainode_billing": 1,
 			},
 		},
 	)
@@ -198,7 +198,7 @@ func main() {
 						ID:      m.ModelName,
 						Object:  "model",
 						Created: time.Now().Unix(),
-						OwnedBy: "DataPaaS",
+						OwnedBy: "AINode",
 					})
 				}
 
@@ -235,7 +235,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("🚀 DataPaaS AI Gateway is running on port %d", cfg.Server.Port)
+		log.Printf("🚀 AINode AI Gateway is running on port %d", cfg.Server.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server listen failed: %v", err)
 		}

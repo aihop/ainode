@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	dbURL := "postgres://datapaas:8kdxEFH8zztfz7QE@192.168.1.117:5432/datapaas"
+	dbURL := "postgres://ainode:8kdxEFH8zztfz7QE@192.168.1.117:5432/ainode"
 	pool, err := pgxpool.New(context.Background(), dbURL)
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
@@ -23,7 +23,7 @@ func main() {
 	('Old Revoked Key', 'sk-test-revoked-003', 1, NULL, NULL, 0, 0, 0, '[]', 0, NOW() - INTERVAL '30 days')
 	ON CONFLICT DO NOTHING;
 	`
-	
+
 	_, err = pool.Exec(context.Background(), sql)
 	if err != nil {
 		log.Fatalf("Failed to insert mock keys: %v\n", err)

@@ -19,7 +19,7 @@ func NewAdminHandler(queries *db.Queries) *AdminHandler {
 
 // 辅助方法：通知网关节点热更新配置
 func notifyConfigRefresh(ctx context.Context) {
-	billing.RedisClient.Publish(ctx, "datapaas_config_refresh", "refresh")
+	billing.RedisClient.Publish(ctx, "ainode_config_refresh", "refresh")
 }
 
 func jsonResponse(w http.ResponseWriter, status int, data interface{}) {

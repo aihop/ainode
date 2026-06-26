@@ -41,7 +41,7 @@ func LoadConfig() {
 
 	// Default values
 	viper.SetDefault("server.port", 8080)
-	viper.SetDefault("db.dsn", "postgres://user:pass@localhost:5432/datapaas?sslmode=disable")
+	viper.SetDefault("db.dsn", "postgres://user:pass@localhost:5432/ainode?sslmode=disable")
 	viper.SetDefault("redis.addr", "localhost:6379")
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)

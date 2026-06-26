@@ -3,7 +3,7 @@
 ## 2026-03-27: 阶段一：基础脚手架初始化
 
 **架构决策与依赖变更：**
-- 初始化了 Go 模块 `datapaas-gateway`。
+- 初始化了 Go 模块 `ainode-gateway`。
 - 创建了严格遵循 `PROMPT.md` 的项目目录结构（包括 `cmd/api`, `internal/proxy`, `internal/adapter`, `internal/billing`, `internal/channel`, `internal/db`, `internal/middleware`, `internal/config`, `docs/ai/logs`, `docs/ai/knowledge`）。
 - 使用 `sqlc` (`github.com/sqlc-dev/sqlc`) 结合 `pgx/v5` 引擎作为 PostgreSQL 数据库交互层。
 - 定义了完整的 `schema.sql` 和基础的 `query.sql` 并成功生成了 `internal/db` 相关的代码，保证类型安全的数据库操作。

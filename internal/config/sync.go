@@ -26,7 +26,7 @@ func StartBackgroundSync(ctx context.Context, queries *db.Queries, interval time
 
 	// 启动 Redis Pub/Sub 监听 (用于控制台修改配置后的秒级刷新)
 	go func() {
-		pubsub := billing.RedisClient.Subscribe(ctx, "datapaas_config_refresh")
+		pubsub := billing.RedisClient.Subscribe(ctx, "ainode_config_refresh")
 		defer pubsub.Close()
 		ch := pubsub.Channel()
 
