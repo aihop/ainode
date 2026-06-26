@@ -161,6 +161,9 @@ curl http://localhost:5900/v1/models
 | `POST /v1/chat/completions` | 对话补全（支持流式） |
 | `POST /v1/completions` | 文本补全（支持流式） |
 | `POST /v1/images/generations` | 图像生成（第二阶段，当前优先适配 OpenAI-compatible 渠道） |
+| `POST /v1/video/generations` | 视频异步任务创建（第三阶段） |
+| `GET /v1/tasks/{task_id}` | 查询异步任务状态 |
+| `POST /v1/tasks/{task_id}/cancel` | 取消异步任务 |
 
 使用任何 OpenAI SDK，指向你的网关地址和 API Key：
 

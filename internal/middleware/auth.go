@@ -44,7 +44,8 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			// 我们主要拦截会产生大量消耗的生成接口
 			isChatRoute := strings.HasSuffix(r.URL.Path, "/chat/completions") || strings.HasSuffix(r.URL.Path, "/completions")
 			isImageRoute := strings.HasSuffix(r.URL.Path, "/images/generations") || strings.HasSuffix(r.URL.Path, "/image/generations")
-			isBillingRoute := isChatRoute || isImageRoute
+			isVideoRoute := strings.HasSuffix(r.URL.Path, "/video/generations")
+			isBillingRoute := isChatRoute || isImageRoute || isVideoRoute
 			if !isBillingRoute {
 				// 标记为非计费请求，跳过预扣费，直接走到限流和代理
 				ctx = context.WithValue(ctx, "is_billing_route", false)
@@ -107,6 +108,17 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 					modelName = parsedPayload.Model
 					promptTokens = estimatePlainTextTokens(parsedPayload.Model, parsedPayload.Prompt)
 					billingUnits = int64(parsedPayload.N)
+					maxOutputTokens = 0
+				case isVideoRoute:
+					requestType = "video_generation"
+					parsedPayload, parseErr := media.ParseVideoGenerationRequest(bodyBytes)
+					if parseErr != nil {
+						utils.WriteOpenAIError(w, http.StatusBadRequest, "Invalid JSON format", "invalid_request_error", "")
+						return
+					}
+					modelName = parsedPayload.Model
+					promptTokens = estimatePlainTextTokens(parsedPayload.Model, parsedPayload.Prompt)
+					billingUnits = 1
 					maxOutputTokens = 0
 				}
 			}

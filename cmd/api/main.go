@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"aihop.io/ainode/internal/api/admin"
+	"aihop.io/ainode/internal/api/gateway"
 	"aihop.io/ainode/internal/api/site"
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/channel"
@@ -173,7 +174,21 @@ func main() {
 		})
 
 		// ==========================
-		// 2. OpenAI 兼容代理路由组
+		// 2. 异步媒体任务路由组
+		// ==========================
+		r.Group(func(asyncRouter chi.Router) {
+			asyncRouter.Use(middleware.AuthAndPreDeductMiddleware(queries))
+			asyncRouter.Use(middleware.RPMAndTPMMiddleware(queries, 60, 100000))
+			asyncRouter.Use(middleware.ModelConcurrencyMiddleware(queries))
+
+			gatewayHandler := gateway.NewGatewayHandler(queries)
+			asyncRouter.Post("/v1/video/generations", gatewayHandler.CreateVideoGenerationTask)
+			asyncRouter.Get("/v1/tasks/{task_id}", gatewayHandler.GetTask)
+			asyncRouter.Post("/v1/tasks/{task_id}/cancel", gatewayHandler.CancelTask)
+		})
+
+		// ==========================
+		// 3. OpenAI 兼容代理路由组
 		// ==========================
 		r.Group(func(proxyRouter chi.Router) {
 			// A. 鉴权、请求解析与预扣费中间件

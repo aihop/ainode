@@ -104,6 +104,32 @@ ADD COLUMN IF NOT EXISTS model_mapping JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE channels
 ADD COLUMN IF NOT EXISTS supports_async BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- 异步媒体任务表（视频生成/编辑等）
+CREATE TABLE IF NOT EXISTS async_tasks (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users (id),
+    channel_id INT REFERENCES channels (id),
+    request_id VARCHAR(100) UNIQUE NOT NULL,
+    task_type VARCHAR(32) NOT NULL, -- video_generation | video_edit
+    provider VARCHAR(32) NOT NULL DEFAULT '',
+    model_name VARCHAR(100) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'queued', -- queued | running | succeeded | failed | canceled
+    upstream_task_id VARCHAR(100),
+    input_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    output_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    error_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    pre_deducted_cents BIGINT NOT NULL DEFAULT 0,
+    grant_deducted BIGINT NOT NULL DEFAULT 0,
+    cash_deducted BIGINT NOT NULL DEFAULT 0,
+    actual_cost_cents BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    finished_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    canceled_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
+);
+
 -- 计费流水表
 -- 修改 billing_logs 为按月分区表
 CREATE TABLE IF NOT EXISTS billing_logs (
@@ -170,3 +196,7 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_key_string ON api_keys (key_string);
 CREATE INDEX IF NOT EXISTS idx_billing_created_at ON billing_logs (created_at);
 
 CREATE INDEX IF NOT EXISTS idx_billing_user_id ON billing_logs (user_id);
+
+CREATE INDEX IF NOT EXISTS idx_async_tasks_user_created_at ON async_tasks (user_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_async_tasks_status_created_at ON async_tasks (status, created_at DESC);

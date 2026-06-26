@@ -43,6 +43,15 @@ func (m *Manager) LoadChannels(ctx context.Context, queries *db.Queries) error {
 
 // GetNextChannel 获取下一个支持该 modelName 的可用渠道 (目前实现为基础的 Round-Robin)
 func (m *Manager) GetNextChannel(modelName string) (*db.Channel, error) {
+	return m.getNextChannel(modelName, false)
+}
+
+// GetNextAsyncChannel 获取支持异步任务的渠道。
+func (m *Manager) GetNextAsyncChannel(modelName string) (*db.Channel, error) {
+	return m.getNextChannel(modelName, true)
+}
+
+func (m *Manager) getNextChannel(modelName string, requireAsync bool) (*db.Channel, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -53,6 +62,9 @@ func (m *Manager) GetNextChannel(modelName string) (*db.Channel, error) {
 	// 找出所有支持该模型的渠道
 	var availableChannels []db.Channel
 	for _, ch := range m.channels {
+		if requireAsync && !ch.SupportsAsync {
+			continue
+		}
 		// models 字段为空表示支持所有模型，或者以逗号分隔的列表中包含该模型
 		if ch.Models == "" || containsModel(ch.Models, modelName) {
 			availableChannels = append(availableChannels, ch)

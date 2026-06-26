@@ -23,6 +23,31 @@ type ApiKey struct {
 	CreatedAt     pgtype.Timestamptz
 }
 
+type AsyncTask struct {
+	ID               string
+	UserID           int32
+	ChannelID        pgtype.Int4
+	RequestID        string
+	TaskType         string
+	Provider         string
+	ModelName        string
+	Status           string
+	UpstreamTaskID   pgtype.Text
+	InputPayload     []byte
+	OutputPayload    []byte
+	ErrorPayload     []byte
+	Metadata         []byte
+	PreDeductedCents int64
+	GrantDeducted    int64
+	CashDeducted     int64
+	ActualCostCents  int64
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	SubmittedAt      pgtype.Timestamptz
+	FinishedAt       pgtype.Timestamptz
+	CanceledAt       pgtype.Timestamptz
+}
+
 type BillingLog struct {
 	ID               pgtype.UUID
 	UserID           pgtype.Int4

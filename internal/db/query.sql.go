@@ -122,6 +122,120 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Cre
 	return i, err
 }
 
+const createAsyncTask = `-- name: CreateAsyncTask :one
+
+INSERT INTO
+    async_tasks (
+        id,
+        user_id,
+        channel_id,
+        request_id,
+        task_type,
+        provider,
+        model_name,
+        status,
+        upstream_task_id,
+        input_payload,
+        output_payload,
+        error_payload,
+        metadata,
+        pre_deducted_cents,
+        grant_deducted,
+        cash_deducted,
+        actual_cost_cents
+    )
+VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        $12,
+        $13,
+        $14,
+        $15,
+        $16,
+        $17
+    ) RETURNING id, user_id, channel_id, request_id, task_type, provider, model_name, status, upstream_task_id, input_payload, output_payload, error_payload, metadata, pre_deducted_cents, grant_deducted, cash_deducted, actual_cost_cents, created_at, updated_at, submitted_at, finished_at, canceled_at
+`
+
+type CreateAsyncTaskParams struct {
+	ID               string
+	UserID           int32
+	ChannelID        pgtype.Int4
+	RequestID        string
+	TaskType         string
+	Provider         string
+	ModelName        string
+	Status           string
+	UpstreamTaskID   pgtype.Text
+	InputPayload     []byte
+	OutputPayload    []byte
+	ErrorPayload     []byte
+	Metadata         []byte
+	PreDeductedCents int64
+	GrantDeducted    int64
+	CashDeducted     int64
+	ActualCostCents  int64
+}
+
+// ==========================================
+// Async Task Queries
+// ==========================================
+func (q *Queries) CreateAsyncTask(ctx context.Context, arg CreateAsyncTaskParams) (AsyncTask, error) {
+	row := q.db.QueryRow(ctx, createAsyncTask,
+		arg.ID,
+		arg.UserID,
+		arg.ChannelID,
+		arg.RequestID,
+		arg.TaskType,
+		arg.Provider,
+		arg.ModelName,
+		arg.Status,
+		arg.UpstreamTaskID,
+		arg.InputPayload,
+		arg.OutputPayload,
+		arg.ErrorPayload,
+		arg.Metadata,
+		arg.PreDeductedCents,
+		arg.GrantDeducted,
+		arg.CashDeducted,
+		arg.ActualCostCents,
+	)
+	var i AsyncTask
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ChannelID,
+		&i.RequestID,
+		&i.TaskType,
+		&i.Provider,
+		&i.ModelName,
+		&i.Status,
+		&i.UpstreamTaskID,
+		&i.InputPayload,
+		&i.OutputPayload,
+		&i.ErrorPayload,
+		&i.Metadata,
+		&i.PreDeductedCents,
+		&i.GrantDeducted,
+		&i.CashDeducted,
+		&i.ActualCostCents,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.FinishedAt,
+		&i.CanceledAt,
+	)
+	return i, err
+}
+
 const createBillingLog = `-- name: CreateBillingLog :one
 INSERT INTO
     billing_logs (
@@ -372,6 +486,50 @@ DELETE FROM models WHERE model_name = $1
 func (q *Queries) DeleteModel(ctx context.Context, modelName string) error {
 	_, err := q.db.Exec(ctx, deleteModel, modelName)
 	return err
+}
+
+const getAsyncTaskByIDAndUser = `-- name: GetAsyncTaskByIDAndUser :one
+SELECT id, user_id, channel_id, request_id, task_type, provider, model_name, status, upstream_task_id, input_payload, output_payload, error_payload, metadata, pre_deducted_cents, grant_deducted, cash_deducted, actual_cost_cents, created_at, updated_at, submitted_at, finished_at, canceled_at
+FROM async_tasks
+WHERE
+    id = $1
+    AND user_id = $2
+LIMIT 1
+`
+
+type GetAsyncTaskByIDAndUserParams struct {
+	ID     string
+	UserID int32
+}
+
+func (q *Queries) GetAsyncTaskByIDAndUser(ctx context.Context, arg GetAsyncTaskByIDAndUserParams) (AsyncTask, error) {
+	row := q.db.QueryRow(ctx, getAsyncTaskByIDAndUser, arg.ID, arg.UserID)
+	var i AsyncTask
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ChannelID,
+		&i.RequestID,
+		&i.TaskType,
+		&i.Provider,
+		&i.ModelName,
+		&i.Status,
+		&i.UpstreamTaskID,
+		&i.InputPayload,
+		&i.OutputPayload,
+		&i.ErrorPayload,
+		&i.Metadata,
+		&i.PreDeductedCents,
+		&i.GrantDeducted,
+		&i.CashDeducted,
+		&i.ActualCostCents,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.FinishedAt,
+		&i.CanceledAt,
+	)
+	return i, err
 }
 
 const getChannelByID = `-- name: GetChannelByID :one
@@ -1034,6 +1192,136 @@ func (q *Queries) ListBillingLogs(ctx context.Context, arg ListBillingLogsParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const markAsyncTaskStatus = `-- name: MarkAsyncTaskStatus :one
+UPDATE async_tasks
+SET
+    status = $2,
+    output_payload = $3,
+    error_payload = $4,
+    metadata = $5,
+    actual_cost_cents = $6,
+    updated_at = NOW(),
+    finished_at = CASE
+        WHEN $2 IN ('succeeded', 'failed', 'canceled') THEN NOW()
+        ELSE finished_at
+    END,
+    canceled_at = CASE
+        WHEN $2 = 'canceled' THEN NOW()
+        ELSE canceled_at
+    END
+WHERE
+    id = $1 RETURNING id, user_id, channel_id, request_id, task_type, provider, model_name, status, upstream_task_id, input_payload, output_payload, error_payload, metadata, pre_deducted_cents, grant_deducted, cash_deducted, actual_cost_cents, created_at, updated_at, submitted_at, finished_at, canceled_at
+`
+
+type MarkAsyncTaskStatusParams struct {
+	ID              string
+	Status          string
+	OutputPayload   []byte
+	ErrorPayload    []byte
+	Metadata        []byte
+	ActualCostCents int64
+}
+
+func (q *Queries) MarkAsyncTaskStatus(ctx context.Context, arg MarkAsyncTaskStatusParams) (AsyncTask, error) {
+	row := q.db.QueryRow(ctx, markAsyncTaskStatus,
+		arg.ID,
+		arg.Status,
+		arg.OutputPayload,
+		arg.ErrorPayload,
+		arg.Metadata,
+		arg.ActualCostCents,
+	)
+	var i AsyncTask
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ChannelID,
+		&i.RequestID,
+		&i.TaskType,
+		&i.Provider,
+		&i.ModelName,
+		&i.Status,
+		&i.UpstreamTaskID,
+		&i.InputPayload,
+		&i.OutputPayload,
+		&i.ErrorPayload,
+		&i.Metadata,
+		&i.PreDeductedCents,
+		&i.GrantDeducted,
+		&i.CashDeducted,
+		&i.ActualCostCents,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.FinishedAt,
+		&i.CanceledAt,
+	)
+	return i, err
+}
+
+const markAsyncTaskSubmitted = `-- name: MarkAsyncTaskSubmitted :one
+UPDATE async_tasks
+SET
+    channel_id = $2,
+    provider = $3,
+    status = $4,
+    upstream_task_id = $5,
+    output_payload = $6,
+    metadata = $7,
+    submitted_at = NOW(),
+    updated_at = NOW()
+WHERE
+    id = $1 RETURNING id, user_id, channel_id, request_id, task_type, provider, model_name, status, upstream_task_id, input_payload, output_payload, error_payload, metadata, pre_deducted_cents, grant_deducted, cash_deducted, actual_cost_cents, created_at, updated_at, submitted_at, finished_at, canceled_at
+`
+
+type MarkAsyncTaskSubmittedParams struct {
+	ID             string
+	ChannelID      pgtype.Int4
+	Provider       string
+	Status         string
+	UpstreamTaskID pgtype.Text
+	OutputPayload  []byte
+	Metadata       []byte
+}
+
+func (q *Queries) MarkAsyncTaskSubmitted(ctx context.Context, arg MarkAsyncTaskSubmittedParams) (AsyncTask, error) {
+	row := q.db.QueryRow(ctx, markAsyncTaskSubmitted,
+		arg.ID,
+		arg.ChannelID,
+		arg.Provider,
+		arg.Status,
+		arg.UpstreamTaskID,
+		arg.OutputPayload,
+		arg.Metadata,
+	)
+	var i AsyncTask
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ChannelID,
+		&i.RequestID,
+		&i.TaskType,
+		&i.Provider,
+		&i.ModelName,
+		&i.Status,
+		&i.UpstreamTaskID,
+		&i.InputPayload,
+		&i.OutputPayload,
+		&i.ErrorPayload,
+		&i.Metadata,
+		&i.PreDeductedCents,
+		&i.GrantDeducted,
+		&i.CashDeducted,
+		&i.ActualCostCents,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.FinishedAt,
+		&i.CanceledAt,
+	)
+	return i, err
 }
 
 const rotateAPIKey = `-- name: RotateAPIKey :exec

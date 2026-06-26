@@ -3,6 +3,7 @@
 > **变更日志 (Changelog)**
 > `2026-06-26`: 新增多模态网关演进约定，统一媒体输入抽象与图生视频异步任务设计边界，见 Section 4.6。
 > `2026-06-26`: 扩展 models/channels 多模态元数据字段，并引入 request 计费模式与图像生成入口约定，见 Section 3 与 Section 4.6。
+> `2026-06-26`: 新增 async_tasks 表与视频异步任务路由骨架，见 Section 3、Section 4.6 与 Section 6。
 
 ## 1. 项目定位与核心架构
 
@@ -98,6 +99,7 @@ AI 请严格按照以下结构组织代码：
 | `api_keys` | 网关调用凭证 | `key_string`, `user_id`, `allowed_models`, `quota_limit` |
 | `models` | 模型定价、模态、计费模式、倍率与并发上限 | `model_name`, `modality`, `pricing_mode`, `pricing_config`, `billing_policy`, `multiplier`, `max_concurrency` |
 | `channels` | 上游渠道配置 | `provider`, `base_url`, `api_key`, `models`, `protocol_type`, `upload_mode`, `model_mapping`, `supports_async`, `weight` |
+| `async_tasks` | 异步媒体任务状态与预扣费跟踪 | `request_id`, `task_type`, `provider`, `model_name`, `status`, `upstream_task_id`, `pre_deducted_cents`, `actual_cost_cents` |
 | `billing_logs` | 计费流水 | `user_id`, `model_name`, `amount_cents`, `prompt_tokens`, `completion_tokens` |
 
 ### 双余额体系设计
@@ -217,6 +219,12 @@ local billing_policy = ARGV[2] or "both"
   - `token`: 沿用输入/输出 Token 价格模型
   - `request`: 按次计费，价格从 `pricing_config.request_price_cents` 读取
 - `POST /v1/images/generations` 可作为第二阶段的图像生成入口，优先复用现有鉴权、预扣费、限流和代理主链；当前更适合 OpenAI-compatible 图像渠道。
+- `POST /v1/video/generations`、`GET /v1/tasks/{task_id}`、`POST /v1/tasks/{task_id}/cancel` 已作为第三阶段的最小异步链路落地：
+  - 提交阶段复用鉴权、预扣费、RPM/TPM 与模型并发中间件
+  - 任务状态持久化到 `async_tasks`
+  - 终态 `succeeded` 走结算，`failed/canceled` 走退款
+  - 当前优先兼容 OpenAI-like 异步任务协议，后续再补厂商专属适配器
+- 异步视频任务的上游接入应统一经过 `AsyncTaskAdapter`，禁止在 `internal/api/gateway` 的 handler 中继续硬编码某家厂商的提交、轮询、取消 HTTP 细节。
 
 ---
 
@@ -243,6 +251,9 @@ local billing_policy = ARGV[2] or "both"
 | `GET /v1/models` | Auth (不计费) | 列出可用模型 |
 | `POST /v1/chat/completions` | Auth + PreDeduct + RateLimit | 对话补全 (流式/非流式) |
 | `POST /v1/completions` | Auth + PreDeduct + RateLimit | 文本补全 (流式/非流式) |
+| `POST /v1/video/generations` | Auth + PreDeduct + RateLimit + ModelConcurrency | 创建视频异步任务 |
+| `GET /v1/tasks/{task_id}` | Auth | 查询异步任务状态 |
+| `POST /v1/tasks/{task_id}/cancel` | Auth | 取消异步任务 |
 | `/*` | Auth + PreDeduct + RateLimit | 其他 OpenAI 兼容路由 |
 
 ### 管理 API (管理员)

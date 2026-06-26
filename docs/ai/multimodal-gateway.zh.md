@@ -208,8 +208,8 @@ curl http://localhost:5900/v1/chat/completions \
 
 - `file_id` 实际解析
 - 图生图独立接口
-- 图生视频 / 视频生视频异步任务
 - 视频上传与文件持久化
+- 厂商专属视频任务协议适配（当前仅提供 OpenAI-like 异步任务骨架）
 
 ## 计费与并发建议
 
@@ -250,10 +250,19 @@ curl http://localhost:5900/v1/chat/completions \
 
 ### 第三阶段待开发
 
-- 增加 `files` 表与 `tasks` 表
 - 实现 `POST /v1/files`
-- 实现 `POST /v1/video/generations`
-- 实现 `GET /v1/tasks/{task_id}`
+- 增加真正的 `file_id` 文件服务
+- 补齐视频厂商适配器与 webhook / poller
+
+### 第三阶段已落地部分
+
+- 新增 `async_tasks` 表与查询层
+- 新增 `POST /v1/video/generations`
+- 新增 `GET /v1/tasks/{task_id}`
+- 新增 `POST /v1/tasks/{task_id}/cancel`
+- 视频任务已复用现有鉴权、预扣费、限流与基础退款逻辑
+- 当前视频异步链优先面向 `OpenAI-like` 异步任务协议：提交 `video/generations`，轮询 `tasks/{id}`，取消 `tasks/{id}/cancel`
+- 已新增 `AsyncTaskAdapter` 抽象与默认 `OpenAI-like` 实现，后续接入具体视频厂商时应优先补适配器，而不是继续在 handler 中硬编码 HTTP 细节
 
 ## 设计原则
 

@@ -139,6 +139,93 @@ VALUES (
     ) RETURNING *;
 
 -- ==========================================
+-- Async Task Queries
+-- ==========================================
+
+-- name: CreateAsyncTask :one
+INSERT INTO
+    async_tasks (
+        id,
+        user_id,
+        channel_id,
+        request_id,
+        task_type,
+        provider,
+        model_name,
+        status,
+        upstream_task_id,
+        input_payload,
+        output_payload,
+        error_payload,
+        metadata,
+        pre_deducted_cents,
+        grant_deducted,
+        cash_deducted,
+        actual_cost_cents
+    )
+VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        $9,
+        $10,
+        $11,
+        $12,
+        $13,
+        $14,
+        $15,
+        $16,
+        $17
+    ) RETURNING *;
+
+-- name: GetAsyncTaskByIDAndUser :one
+SELECT *
+FROM async_tasks
+WHERE
+    id = $1
+    AND user_id = $2
+LIMIT 1;
+
+-- name: MarkAsyncTaskSubmitted :one
+UPDATE async_tasks
+SET
+    channel_id = $2,
+    provider = $3,
+    status = $4,
+    upstream_task_id = $5,
+    output_payload = $6,
+    metadata = $7,
+    submitted_at = NOW(),
+    updated_at = NOW()
+WHERE
+    id = $1 RETURNING *;
+
+-- name: MarkAsyncTaskStatus :one
+UPDATE async_tasks
+SET
+    status = $2,
+    output_payload = $3,
+    error_payload = $4,
+    metadata = $5,
+    actual_cost_cents = $6,
+    updated_at = NOW(),
+    finished_at = CASE
+        WHEN $2 IN ('succeeded', 'failed', 'canceled') THEN NOW()
+        ELSE finished_at
+    END,
+    canceled_at = CASE
+        WHEN $2 = 'canceled' THEN NOW()
+        ELSE canceled_at
+    END
+WHERE
+    id = $1 RETURNING *;
+
+-- ==========================================
 -- Admin API Queries (Admin Panel CRUD)
 -- ==========================================
 
