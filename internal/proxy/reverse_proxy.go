@@ -20,6 +20,7 @@ import (
 	"aihop.io/ainode/internal/config"
 	"aihop.io/ainode/internal/db"
 	"aihop.io/ainode/internal/metrics"
+	"aihop.io/ainode/internal/utils"
 )
 
 // FallbackTransport 实现 http.RoundTripper 接口，用于在遇到上游限流或错误时进行重试
@@ -188,11 +189,13 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 		outputPrice := int64(0)
 		cacheHitPrice := int64(0)
 		cacheMissPrice := int64(0)
+		multiplier := float32(1)
 		if modelInfo, err := config.GlobalModelManager.GetModel(context.Background(), queries, modelName); err == nil {
 			inputPrice = modelInfo.InputPriceCents
 			outputPrice = modelInfo.OutputPriceCents
 			cacheHitPrice = modelInfo.CacheHitPriceCents
 			cacheMissPrice = modelInfo.CacheMissPriceCents
+			multiplier = modelInfo.Multiplier
 		}
 
 		onComplete := func(pTokens, cTokens, cacheHitTokens, cacheMissTokens int) {
@@ -219,10 +222,11 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				regularPromptTokens = 0
 			}
 
-			actualCost := (int64(regularPromptTokens)*inputPrice +
+			actualBaseCost := (int64(regularPromptTokens)*inputPrice +
 				int64(cacheHitTokens)*cacheHitPrice +
 				int64(cacheMissTokens)*cacheMissPrice +
 				int64(cTokens)*outputPrice) / 1000000
+			actualCost := utils.ApplyMultiplier(actualBaseCost, multiplier, false)
 
 			settleReq := billing.SettlementRequest{
 				UserID:           userID,

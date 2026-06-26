@@ -114,8 +114,9 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 				maxOutputTokens = 4096
 			}
 
-			// 计算预扣费 (单位: 分/Cents)
-			estimatedCostCents := (int64(promptTokens)*modelInfo.InputPriceCents + int64(maxOutputTokens)*modelInfo.OutputPriceCents) / 1000000
+			// 计算预扣费：先算基础成本，再应用倍率。预扣费使用向上取整，避免低估。
+			estimatedBaseCostCents := (int64(promptTokens)*modelInfo.InputPriceCents + int64(maxOutputTokens)*modelInfo.OutputPriceCents) / 1000000
+			estimatedCostCents := utils.ApplyMultiplier(estimatedBaseCostCents, modelInfo.Multiplier, true)
 
 			// 5. 调用预扣费 (如果余额不足会返回错误)
 			grantDeducted, cashDeducted, err := billing.PreDeduct(ctx, queries, user.ID, estimatedCostCents)

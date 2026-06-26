@@ -8,6 +8,14 @@
 - 更新 `internal/api/admin/model.go` 与 APayShop `app/themes/ainode/admin/pages/models.vue`，后台创建/编辑模型时可以直接配置 `Max Concurrency`。
 - 更新 `AGENT.md`，将模型级并发限制沉淀为项目规则，明确 `models.max_concurrency` 是当前阶段的标准入口。
 
+## 2026-05-15: Multiplier 接入真实扣费公式
+
+**计费逻辑修正：**
+- 新增 `internal/utils/pricing.go`，统一处理倍率应用逻辑，避免预扣费与最终结算公式分叉。
+- `AuthAndPreDeductMiddleware` 现在会先计算基础预估金额，再应用 `models.multiplier`，并使用**向上取整**作为预扣金额。
+- `ReverseProxy.ModifyResponse` 的最终结算现在会对基础实际金额应用 `models.multiplier`，并使用**四舍五入**写入 `ActualCostCents`。
+- 这意味着 `multiplier` 从“仅存储、不生效”变成了**真实参与用户收费**的倍率字段；如果后台直接录入最终卖价，应保持 `multiplier = 1.0`。
+
 ## 2026-03-27: 阶段一：基础脚手架初始化
 
 **架构决策与依赖变更：**

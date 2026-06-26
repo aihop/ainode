@@ -167,6 +167,14 @@ return 1
 
 > **结算退款**也必须遵循级联逻辑：优先退还到 `cash_balance`，超出部分再退还到 `grant_balance`。
 
+### 4.1.1 模型倍率 (`multiplier`) 生效规则
+
+- `models.input_price_cents / output_price_cents / cache_hit_price_cents / cache_miss_price_cents` 存放基础单价。
+- `models.multiplier` 是用户侧真实收费倍率，必须同时参与：
+  - **预扣费**：基础预估金额算出后，按倍率放大并**向上取整**，避免低估预扣。
+  - **最终结算**：基础实际金额算出后，按倍率放大并**四舍五入**，保证最终账单稳定。
+- 如果运营需要直接录入最终卖价，可将 `multiplier` 保持为 `1.0`。
+
 ### 4.2 订阅周期清零与重置
 
 当主站 (APayShop) 触发订阅续费成功时：
