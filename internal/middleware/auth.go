@@ -146,6 +146,11 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			}
 			estimatedCostCents := utils.ApplyMultiplier(estimatedBaseCostCents, modelInfo.Multiplier, true)
 
+			// 确保预扣费至少为 1 分钱，防止余额为 0 时因整数除法结果归零而绕过余额检查
+			if estimatedCostCents == 0 {
+				estimatedCostCents = 1
+			}
+
 			// 5. 调用预扣费 (如果余额不足会返回错误)
 			grantDeducted, cashDeducted, err := billing.PreDeduct(ctx, queries, user.ID, estimatedCostCents, modelInfo.BillingPolicy)
 			if err != nil {
