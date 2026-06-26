@@ -7,6 +7,10 @@ server:
 
 db:
   dsn: ""
+  # 连接池上下限。需 > Worker 并发(10) + 单请求并发查询峰值(dashboard ~6)，且 ≤ Postgres max_connections。
+  # 留空/0 使用内置默认(max_conns=20, min_conns=2)。
+  max_conns: 20
+  min_conns: 2
 
 redis:
   addr: "redis:6379"

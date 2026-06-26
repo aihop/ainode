@@ -14,7 +14,10 @@ import (
 	"aihop.io/ainode/internal/utils"
 )
 
-const modelConcurrencyKeyTTL = 2 * time.Minute
+// modelConcurrencyKeyTTL 是并发占位 key 的兜底过期时间（仅用于进程异常未 release 时自愈）。
+// 取值需大于绝大多数请求（含流式/agent 长生成）的实际时长，否则长请求进行中 key 就过期、
+// 槽位被提前释放，导致并发上限被突破、计数漂移为负。正常路径由 defer release() 即时归还。
+const modelConcurrencyKeyTTL = 15 * time.Minute
 
 var errModelConcurrencyExceeded = errors.New("model concurrency exceeded")
 

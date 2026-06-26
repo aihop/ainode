@@ -57,13 +57,31 @@ func main() {
 		log.Fatalf("Failed to initialize Redis: %v", err)
 	}
 
-	// 3. 初始化 PostgreSQL
+	// 3. 初始化 PostgreSQL（显式配置连接池，避免默认 max(4,CPU) 在并发多查询/Worker 场景被打满）
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, cfg.DB.DSN)
+	poolCfg, err := pgxpool.ParseConfig(cfg.DB.DSN)
+	if err != nil {
+		log.Fatalf("Invalid database DSN: %v", err)
+	}
+	maxConns := cfg.DB.MaxConns
+	if maxConns <= 0 {
+		maxConns = 20
+	}
+	minConns := cfg.DB.MinConns
+	if minConns < 0 {
+		minConns = 0
+	}
+	if minConns > maxConns {
+		minConns = maxConns
+	}
+	poolCfg.MaxConns = maxConns
+	poolCfg.MinConns = minConns
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v", err)
 	}
 	defer pool.Close()
+	log.Printf("PostgreSQL pool: MaxConns=%d, MinConns=%d", maxConns, minConns)
 
 	// 3.1 自动执行 schema.sql 建表
 	schemaBytes, err := os.ReadFile("schema.sql")
@@ -198,6 +216,7 @@ func main() {
 
 			// Users
 			adminRouter.Get("/api/admin/users", adminHandler.ListUsers)
+			adminRouter.Get("/api/admin/users/summary", adminHandler.UsersSummary)
 			adminRouter.Get("/api/admin/users/{id}/balance-logs", adminHandler.ListUserBalanceLogs)
 			adminRouter.Post("/api/admin/users/{id}/balance", adminHandler.AdjustUserBalance)
 		})
@@ -226,7 +245,10 @@ func main() {
 			siteRouter.Get("/api/site/models/groups", siteHandler.ListModelGroupsHandler)
 		})
 
-		r.Post("/internal/webhooks/events", webhookHandler.HandleEvent)
+		// Webhook 自带 Bearer/HMAC 鉴权，不挂 InternalTokenAuth 中间件。
+		// 新路径 /api/webhooks/events 对齐 /api/* 命名；旧 /internal/... 过渡期保留，
+		// 待 APayShop 切到新地址、确认到账正常后再删除旧路径。
+		r.Post("/api/webhooks/events", webhookHandler.HandleEvent)
 
 		// ==========================
 		// 2. 异步媒体任务路由组

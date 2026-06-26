@@ -309,31 +309,21 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			metrics.GatewayTokensTotal.WithLabelValues(publicModelName, strconv.Itoa(int(channelID)), "cache_hit").Add(float64(cacheHitTokens))
 			metrics.GatewayTokensTotal.WithLabelValues(publicModelName, strconv.Itoa(int(channelID)), "cache_miss").Add(float64(cacheMissTokens))
 
-			// 如果没有解析到缓存 token，默认将所有 prompt_tokens 视为未命中
-			if cacheHitTokens == 0 && cacheMissTokens == 0 {
-				cacheMissTokens = pTokens
-			}
-
-			// 计算实际消耗金额：(缓存命中 * 命中单价 + 缓存未命中 * 未命中单价 + 输出 * 输出单价) / 100万
-			// 这里我们假设 promptTokens 总是等于 hit + miss。如果有额外的基础 token，可以加上。
-			regularPromptTokens := pTokens - cacheHitTokens - cacheMissTokens
-			if regularPromptTokens < 0 {
-				regularPromptTokens = 0
-			}
-
-			actualBaseCost := int64(0)
-			if pricingMode == "request" || requestType == "image_generation" {
-				if billingUnits <= 0 {
-					billingUnits = 1
-				}
-				actualBaseCost = requestPrice * billingUnits
-			} else {
-				actualBaseCost = (int64(regularPromptTokens)*inputPrice +
-					int64(cacheHitTokens)*cacheHitPrice +
-					int64(cacheMissTokens)*cacheMissPrice +
-					int64(cTokens)*outputPrice) / 1000000
-			}
-			actualCost := utils.ApplyMultiplier(actualBaseCost, multiplier, false)
+			// 结算计价（纯函数，便于单测）：无缓存明细→prompt 按 inputPrice；
+			// 有明细→命中按命中价、未命中按 cacheMissPrice(未配回退 inputPrice)；request 模式按次。
+			actualCost := computeActualCost(
+				settlementPricing{
+					InputPrice:     inputPrice,
+					OutputPrice:    outputPrice,
+					CacheHitPrice:  cacheHitPrice,
+					CacheMissPrice: cacheMissPrice,
+					Multiplier:     multiplier,
+					PricingMode:    pricingMode,
+					RequestPrice:   requestPrice,
+				},
+				usageTokens{Prompt: pTokens, Completion: cTokens, CacheHit: cacheHitTokens, CacheMiss: cacheMissTokens},
+				requestType, billingUnits,
+			)
 
 			settleReq := billing.SettlementRequest{
 				UserID:           userID,

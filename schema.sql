@@ -229,9 +229,16 @@ CREATE TABLE IF NOT EXISTS model_failure_logs (
 -- 添加索引
 CREATE INDEX IF NOT EXISTS idx_api_keys_key_string ON api_keys (key_string);
 
+-- api_keys 大量按 user_id 过滤（活跃 Key 计数、用户 Key 列表、admin 按用户聚合），
+-- 组合索引同时服务「按 user 列表 + 按时间排序」与「按 user 计数」。
+CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys (user_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_billing_created_at ON billing_logs (created_at);
 
 CREATE INDEX IF NOT EXISTS idx_billing_user_id ON billing_logs (user_id);
+
+-- 用户侧统计/账单/仪表盘均按 (user_id, created_at) 过滤，组合索引避免单列索引 + 过滤
+CREATE INDEX IF NOT EXISTS idx_billing_user_created_at ON billing_logs (user_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_async_tasks_user_created_at ON async_tasks (user_id, created_at DESC);
 

@@ -168,6 +168,35 @@ func (h *Handler) processTransaction(ctx context.Context, req transactionWebhook
 		return transactionProcessResult{}, http.StatusInternalServerError, "Failed to create transaction"
 	}
 
+	// 同步写余额流水（balance_logs）——与管理员直充口径一致，否则 webhook 充值不会出现在
+	// 用户/管理员的「资金/余额流水」里（那些页面读的是 balance_logs，不是 transactions）。
+	actionType := req.Type
+	if actionType == "" {
+		if req.Direction == "debit" {
+			actionType = "deduct"
+		} else {
+			actionType = "recharge"
+		}
+	}
+	operatorName := req.Source
+	if operatorName == "" {
+		operatorName = "system"
+	}
+	if err := txQueries.CreateBalanceLog(ctx, db.CreateBalanceLogParams{
+		TransactionID:      pgtype.Int8{Int64: transaction.ID, Valid: true},
+		UserID:             req.UserID,
+		BalanceType:        req.BalanceType,
+		ActionType:         actionType,
+		AmountCents:        scaledAmount,
+		BeforeBalanceCents: beforeBalance,
+		AfterBalanceCents:  afterBalance,
+		OperatorAdminID:    pgtype.Int4{}, // webhook 入账无管理员操作者
+		OperatorName:       operatorName,
+		Remark:             req.Remark,
+	}); err != nil {
+		return transactionProcessResult{}, http.StatusInternalServerError, "Failed to create balance log"
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return transactionProcessResult{}, http.StatusInternalServerError, "Failed to commit transaction"
 	}

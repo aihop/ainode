@@ -24,6 +24,10 @@ type ServerConfig struct {
 
 type DBConfig struct {
 	DSN string `mapstructure:"dsn"`
+	// 连接池上下限。需 > Worker 并发 + 单请求并发查询峰值，且 ≤ Postgres max_connections。
+	// <=0 时回落到内置默认（MaxConns=20, MinConns=2）。
+	MaxConns int32 `mapstructure:"max_conns"`
+	MinConns int32 `mapstructure:"min_conns"`
 }
 
 type RedisConfig struct {
@@ -55,6 +59,8 @@ func LoadConfig() {
 	viper.SetDefault("server.rpm_limit", 600)
 	viper.SetDefault("server.tpm_limit", 2000000)
 	viper.SetDefault("db.dsn", "postgres://user:pass@localhost:5432/ainode?sslmode=disable")
+	viper.SetDefault("db.max_conns", 20)
+	viper.SetDefault("db.min_conns", 2)
 	viper.SetDefault("redis.addr", "localhost:6379")
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)

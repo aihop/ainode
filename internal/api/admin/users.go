@@ -110,12 +110,6 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	summary, err := h.queries.GetUsersSummaryForAdmin(r.Context(), keyword)
-	if err != nil {
-		errorResponse(w, http.StatusInternalServerError, "Failed to summarize users")
-		return
-	}
-
 	items := make([]adminUserItem, 0, len(users))
 	for _, user := range users {
 		cashBalance := amountFromScaledInt(user.CashBalance)
@@ -151,6 +145,25 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, http.StatusOK, map[string]any{
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
+		"data":      items,
+	})
+}
+
+// UsersSummary 返回管理员用户全局汇总（与列表拆开，避免列表翻页时重复跑全表聚合；
+// 前端可单独、低频拉取并缓存）。
+func (h *AdminHandler) UsersSummary(w http.ResponseWriter, r *http.Request) {
+	keyword := r.URL.Query().Get("keyword")
+
+	summary, err := h.queries.GetUsersSummaryForAdmin(r.Context(), keyword)
+	if err != nil {
+		errorResponse(w, http.StatusInternalServerError, "Failed to summarize users")
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, map[string]any{
 		"summary": adminUsersSummary{
 			TotalUsers:        summary.TotalUsers,
 			ActiveUsers:       summary.ActiveUsers,
@@ -161,10 +174,6 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 			TotalTokens:       summary.TotalTokens,
 			TotalActiveKeys:   summary.TotalActiveKeys,
 		},
-		"total":     total,
-		"page":      page,
-		"page_size": pageSize,
-		"data":      items,
 	})
 }
 

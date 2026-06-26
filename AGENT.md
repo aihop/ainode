@@ -1,6 +1,8 @@
 # AI Node: 高性能 AI 模型网关与计费系统
 
 > **变更日志 (Changelog)**
+> `2026-06-27`: 修复 webhook 充值只写 `transactions` 漏写 `balance_logs`，导致「资金/余额流水」看不到 webhook 入账；现 `processTransaction` 同事务补写 balance_logs，与管理员直充口径一致，见 Section 8.3.1。webhook 路由对齐 `/api/*` 命名：新增 `/api/webhooks/events`，旧 `/internal/webhooks/events` 过渡期双注册。性能:`pgxpool` 显式配置连接池(默认 MaxConns=20)、新增 `api_keys(user_id,created_at)` 与 `billing_logs(user_id,created_at)` 索引、admin 用户汇总拆为 `/api/admin/users/summary`。
+> `2026-06-27`: 修复缓存计价少收：无缓存明细时 prompt 按 `input_price_cents`（而非 cacheMiss=0），cacheMiss 未配回退 inputPrice；`multiplier<=0` 按 1 处理防白嫖；结算计价抽成纯函数 `proxy/pricing.go::computeActualCost` 并加单测；模型并发占位 TTL 2m→15m 防长流式中途丢槽，见 Section 4.1.2 / 4.1.3。
 > `2026-06-27`: 新增独立钱包接口 `GET /api/site/wallet`（进账 funded / 用了 spent / 还剩 available + 现金/赠金明细），dashboard 移除钱包块回归活动概览，stats 去除重复的累计消耗（累计消耗唯一出口为 wallet.spent），见 Section 2 与 Section 6。
 > `2026-06-27`: 新增结算 outbox 兜底：`settlement_outbox` 表 + `internal/billing/outbox_relay.go`，asynq 投递失败时落库由后台 relay 重投，保证“Redis 已扣费但账单不丢”，见 Section 3 与 Section 4.1。
 > `2026-06-27`: 账单结算 Worker 改为单事务（幂等检查+双余额扣减+写流水同事务），修复重试重复扣 DB 余额；充值缓存改用原子 `INCRBY`（`lua/credit_cache.lua` + `CreditBalanceCache`），避免覆盖在途扣减导致超额消费，见 Section 4.1。
@@ -48,8 +50,12 @@ AI 请严格按照以下结构组织代码：
 ├── cmd/api/main.go          # 程序入口，组装路由与依赖注入
 ├── cmd/migrate/main.go      # 手动迁移执行器，顺序执行 schema.sql 与 migrations/*.sql
 ├── internal/
+│   ├── reqctx/              # 请求级 context 的类型安全 key（消除裸字符串 key / SA1029）
+│   │   └── keys.go
 │   ├── proxy/               # ReverseProxy 核心逻辑、重试机制 (Fallback)
 │   │   ├── reverse_proxy.go # 自定义 Transport、ModifyResponse、ErrorHandler
+│   │   ├── failure_log.go   # 渠道/模型失败日志与错误分类（从 reverse_proxy 拆出）
+│   │   ├── stream_options.go# 给流式请求注入 stream_options.include_usage
 │   │   └── tally_reader.go  # SSE 流式拦截、Token 统计、断流止损
 │   ├── provider/            # Provider 内核、注册中心、策略与厂商实现
 │   │   ├── contract.go      # Provider 契约、能力声明、异步任务接口
@@ -74,10 +80,16 @@ AI 请严格按照以下结构组织代码：
 │   │   └── together/        # Together AI Provider (OpenAI-like)
 │   ├── billing/             # 计费业务核心
 │   │   ├── lua/
-│   │   │   ├── pre_deduct.lua  # 预扣费原子脚本
-│   │   │   └── refund.lua      # 退款脚本
+│   │   │   ├── pre_deduct.lua   # 预扣费原子脚本
+│   │   │   ├── refund.lua       # 退款脚本
+│   │   │   ├── compensate.lua   # 预扣不足补扣（带余额下限，绝不为负）
+│   │   │   └── credit_cache.lua # 充值缓存原子 INCRBY（仅 key 存在时）
 │   │   ├── deduct.go        # 预扣费调用入口
-│   │   ├── settlement.go    # 多退少补结算逻辑
+│   │   ├── settlement.go    # 多退少补结算 + asynq 入队（失败落 outbox）
+│   │   ├── outbox_relay.go  # settlement_outbox 后台 relay 重投
+│   │   ├── credit_cache.go  # CreditBalanceCache：充值对缓存做相对增减
+│   │   ├── balance.go       # GetUserBalance：优先 Redis、回源 DB
+│   │   ├── partition.go     # billing_logs 分区动态创建 + 维护
 │   │   └── redis.go         # Redis 余额操作
 │   ├── channel/             # 上游渠道池管理
 │   │   ├── manager.go       # 内存缓存 + 轮询调度 + capability 过滤
@@ -85,16 +97,20 @@ AI 请严格按照以下结构组织代码：
 │   ├── db/                  # sqlc 生成的代码 (Querier, Models)
 │   │   ├── db.go
 │   │   ├── models.go
-│   │   └── query.sql.go
+│   │   ├── query.sql.go
+│   │   ├── outbox_queries.go   # 手写：settlement_outbox 增删查（sqlc 风格）
+│   │   └── billing_queries.go  # 手写：累计消耗 / 累计入账汇总（sqlc 风格）
 │   ├── middleware/          # 中间件
 │   │   ├── lua/
 │   │   │   └── rate_limit.lua  # 滑动窗口限流脚本
 │   │   ├── auth.go          # 鉴权 + 预扣费中间件
-│   │   ├── rate_limit.go    # RPM/TPM 限流中间件
+│   │   ├── internal_token.go # 服务间 Internal Token 鉴权（admin/site 共用，常量时间比较）
+│   │   ├── rate_limit.go    # RPM/TPM 限流中间件（阈值来自 config）
 │   │   └── model_concurrency.go # 模型级并发占位与释放
 │   ├── api/                 # HTTP 接口
 │   │   ├── admin/           # 管理员 API (渠道/模型 CRUD、账单查询)
-│   │   ├── site/            # 用户 API (仪表盘、统计、Key 管理)
+│   │   ├── site/            # 用户 API (钱包/仪表盘/统计/Key/模型分组)
+│   │   │   └── wallet.go    # 钱包接口：进账/用了/还剩
 │   │   └── webhook/         # 内部交易事件 Webhook (APayShop 入账等)
 │   ├── config/              # 应用级配置
 │   │   ├── config.go        # viper 配置加载
@@ -105,7 +121,10 @@ AI 请严格按照以下结构组织代码：
 │   ├── worker/              # Asynq 异步任务
 │   │   └── billing.go       # 账单持久化 Worker
 │   └── utils/               # 工具
-│       └── error.go         # OpenAI 兼容错误格式封装
+│       ├── error.go         # OpenAI 兼容错误格式封装
+│       ├── pricing.go       # 倍率换算（ApplyMultiplier）
+│       ├── safego.go        # SafeGo：后台协程 panic 兜底 + 重启
+│       └── tokenizer.go     # GetTokenizer：按模型缓存 tiktoken 编码器
 ├── schema.sql               # PostgreSQL 表结构定义（也作为手动迁移基线）
 ├── migrations/              # 增量 SQL 迁移目录
 ├── scripts/migrate.sh       # 用户可直接执行的手动迁移脚本
@@ -219,6 +238,15 @@ local billing_policy = ARGV[2] or "both"
   - **预扣费**：基础预估金额算出后，按倍率放大并**向上取整**，避免低估预扣。
   - **最终结算**：基础实际金额算出后，按倍率放大并**四舍五入**，保证最终账单稳定。
 - 如果运营需要直接录入最终卖价，可将 `multiplier` 保持为 `1.0`。
+- **`multiplier <= 0` 一律按 `1.0` 处理**（防止漏配倍率导致费用被乘成 0 即白嫖）；预扣/结算/模型展示三处口径一致。
+
+### 4.1.3 缓存计价规则（prompt 计价口径，预扣与结算必须一致）
+
+结算计价已收口为纯函数 `internal/proxy/pricing.go` 的 `computeActualCost`（含单测）：
+
+- **无缓存命中/未命中明细时**（多数上游不返回 `usage` 的缓存拆分），prompt **全部按 `input_price_cents`** 计——与预扣口径一致，**不得**当成「全部未命中」去套 `cache_miss_price_cents`（未配=0 会系统性少收）。
+- **有明细时**：命中按 `cache_hit_price_cents`（折扣）；未命中本质是全价，按 `cache_miss_price_cents`，**未配（≤0）则回退 `input_price_cents`**。
+- 修改结算计价逻辑后，必须同步更新 `computeActualCost` 的单测。
 
 ### 4.2 订阅周期清零与重置
 
@@ -326,11 +354,14 @@ local billing_policy = ARGV[2] or "both"
 
 | 方法 | 路由 | 说明 |
 |------|------|------|
-| GET | `/api/site/dashboard` | 用户仪表盘概览 |
-| GET | `/api/site/stats` | 详细使用统计 |
-| GET | `/api/site/billing-logs/list` | 用户账单记录 |
+| GET | `/api/site/wallet` | 钱包概览：进账 `funded` / 用了 `spent` / 还剩 `available` + 现金/赠金明细（累计消耗的唯一出口；金额均附 `*Cents` 原始整数） |
+| GET | `/api/site/dashboard` | 用户仪表盘概览（活动维度：热力图、调用数、用量、配额、近 30 天支出；不含钱包） |
+| GET | `/api/site/stats` | 详细使用统计（range 内支出 `summary.totalCost`、趋势、模型分布） |
+| GET | `/api/site/billing-logs/list` | 用户账单记录（每条含高精度 `cost` 与原始 `amountCents`） |
 | GET/POST | `/api/site/api-keys/list\|create\|delete\|status\|rotate` | API Key 全生命周期管理 |
-| GET | `/api/site/models/groups` | 推荐模型分组 |
+| GET | `/api/site/models/groups` | 可用模型分组（来自 models 表 active 模型，按厂商动态生成 + 真实单价） |
+
+> 接口职责划分：钱包余额相关只在 `/api/site/wallet`（变化快、可高频刷新）；dashboard/stats 专注活动与统计，避免金额口径重复。
 
 ### 内部 Webhook API
 
@@ -413,6 +444,16 @@ type ProviderAdapter interface {
 - 所有数据库查询必须通过 sqlc 生成的类型安全接口。
 - 修改 `schema.sql` 或 `query.sql` 后必须执行 `sqlc generate`。
 - **热路径上禁止直接查询 PostgreSQL**——余额和配置必须通过 Redis/内存缓存。
+- 无 sqlc 工具链时新增查询可手写在独立文件（`db/outbox_queries.go`、`db/billing_queries.go`），遵循 sqlc 风格；切回 sqlc 生成时需迁移到 `query.sql` 并删除手写文件，避免方法重复定义。
+- **资金/审计的多步写必须包在同一 `pgx.Tx` 事务内**（幂等检查 + 余额扣减 + 写流水），否则重试会重复扣减（见 `worker/billing.go`）。
+
+### 8.3.1 并发与金额约定
+
+- **后台常驻协程必须经 `utils.SafeGo` 启动**：裸 `go func` 的未捕获 panic 会让整个进程退出；SafeGo 捕获 panic 并退避重启。
+- **计费/结算/审计等需在客户端断流后仍完成的写**，必须脱离请求 context（用带超时上限的 `context.Background()`，见 `reverse_proxy.go` 的 `newBillingWriteCtx`），不能用 `req.Context()`，否则断流会取消结算/退款导致资金不一致。
+- **金额对外展示**：余额等大额可用 `centsToMoney`（2 位）；单次/小额消费必须用 `centsToMoneyPrecise`（8 位，与 10^8 刻度对齐）并附原始 `*Cents` 整数，前端累加/对账一律用整数，避免小额被舍成 0 或浮点误差。
+- **缓存余额的增量操作用相对（DECRBY/INCRBY），禁止用绝对 SET 覆盖**（订阅重置这种本就是覆盖语义的除外），否则会覆盖在途扣减。
+- **任何改用户余额的入账/扣账（充值、套餐发放、管理员直充、webhook 入账等）必须在同一 DB 事务内同时写 `transactions`（资金总账）和 `balance_logs`（余额流水）**，并更新 `users` 余额。三者口径要一致——「资金/余额流水」展示页读的是 `balance_logs`，只写 `transactions` 会导致流水里看不到这笔（webhook 曾漏写 balance_logs 即此坑）。参考实现:`admin/users.go AdjustUserBalance` 与 `webhook/processor.go processTransaction`。
 
 ### 8.4 关键中间件顺序
 
