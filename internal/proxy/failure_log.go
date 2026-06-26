@@ -104,7 +104,9 @@ func logModelFailure(ctx context.Context, queries *db.Queries, statusCode int, r
 		IsRetryable:  isRetryable,
 	}
 
-	_ = queries.CreateModelFailureLog(context.Background(), params)
+	writeCtx, cancel := newBillingWriteCtx()
+	_ = queries.CreateModelFailureLog(writeCtx, params)
+	cancel()
 }
 
 func (t *FallbackTransport) logChannelFailure(req *http.Request, ch *db.Channel, resp *http.Response, roundTripErr error, responseBody string) {
@@ -112,7 +114,8 @@ func (t *FallbackTransport) logChannelFailure(req *http.Request, ch *db.Channel,
 		return
 	}
 
-	ctx := context.Background()
+	ctx, cancel := newBillingWriteCtx()
+	defer cancel()
 	requestID, _ := req.Context().Value(reqctx.KeyRequestID).(string)
 	modelName, _ := req.Context().Value(reqctx.KeyPublicModelName).(string)
 	if modelName == "" {

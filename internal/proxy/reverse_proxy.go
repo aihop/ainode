@@ -26,6 +26,16 @@ import (
 
 const maxFailureResponseBodyLength = 4096
 
+// billingWriteTimeout 限定计费/退款/审计等后台写的最长耗时。
+// 这些写故意脱离请求 context（客户端断流也必须完成结算），但仍需一个上限，
+// 避免 DB/Redis 卡死时无限挂起拖住结算 goroutine。
+const billingWriteTimeout = 10 * time.Second
+
+// newBillingWriteCtx 返回脱离请求生命周期、但带超时上限的 context。
+func newBillingWriteCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), billingWriteTimeout)
+}
+
 // FallbackTransport 实现 http.RoundTripper 接口，用于在遇到上游限流或错误时进行重试。
 // 失败日志相关逻辑（classifyModelFailure / logModelFailure / logChannelFailure）见 failure_log.go。
 type FallbackTransport struct {
@@ -254,7 +264,9 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			// 如果最终还是失败，应该在这里触发全额退还预扣费的回调
 			if preDeductedCents > 0 {
 				log.Printf("Upstream error %d from channel %d, refunding...", resp.StatusCode, channelID)
-				billing.Refund(context.Background(), queries, userID, preDeductedCents, grantDeducted, cashDeducted, reqID)
+				rctx, rcancel := newBillingWriteCtx()
+				billing.Refund(rctx, queries, userID, preDeductedCents, grantDeducted, cashDeducted, reqID)
+				rcancel()
 			}
 			// 监控埋点：记录失败请求
 			metrics.GatewayRequestTotal.WithLabelValues(publicModelName, strconv.Itoa(int(channelID)), strconv.Itoa(resp.StatusCode)).Inc()
@@ -272,7 +284,10 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 		multiplier := float32(1)
 		pricingMode := "token"
 		requestPrice := int64(0)
-		if modelInfo, err := config.GlobalModelManager.GetModel(context.Background(), queries, publicModelName); err == nil {
+		mctx, mcancel := newBillingWriteCtx()
+		modelInfo, merr := config.GlobalModelManager.GetModel(mctx, queries, publicModelName)
+		mcancel()
+		if merr == nil {
 			inputPrice = modelInfo.InputPriceCents
 			outputPrice = modelInfo.OutputPriceCents
 			cacheHitPrice = modelInfo.CacheHitPriceCents
@@ -337,7 +352,9 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			}
 
 			// 触发异步结算
-			billing.Settle(context.Background(), queries, settleReq)
+			sctx, scancel := newBillingWriteCtx()
+			billing.Settle(sctx, queries, settleReq)
+			scancel()
 		}
 
 		if isStream {
@@ -397,7 +414,9 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				// 这里全额退还预扣费（宁可少收，不可错扣）。
 				log.Printf("Failed to read non-stream response body for settlement (req %s): %v, refunding pre-deduct", reqID, err)
 				if preDeductedCents > 0 {
-					billing.Refund(context.Background(), queries, userID, preDeductedCents, grantDeducted, cashDeducted, reqID)
+					nctx, ncancel := newBillingWriteCtx()
+					billing.Refund(nctx, queries, userID, preDeductedCents, grantDeducted, cashDeducted, reqID)
+					ncancel()
 				}
 			}
 		}
@@ -428,7 +447,9 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
 				reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
 				if preDeductedCents > 0 {
-					billing.Refund(context.Background(), queries, userID, preDeductedCents, grantDeducted, cashDeducted, reqID)
+					ectx, ecancel := newBillingWriteCtx()
+					billing.Refund(ectx, queries, userID, preDeductedCents, grantDeducted, cashDeducted, reqID)
+					ecancel()
 				}
 			}
 
