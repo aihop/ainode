@@ -94,7 +94,7 @@ func (h *InternalHandler) DashboardHandler(w http.ResponseWriter, r *http.Reques
 	for _, t := range trendSeries {
 		if t.Date.Valid {
 			heatmap = append(heatmap, HeatmapItem{
-				Date:  t.Date.Time.Format("2006-01-02"),
+				Date:  t.Date.Time.UTC().Format("2006-01-02"),
 				Count: t.RequestCount,
 			})
 		}

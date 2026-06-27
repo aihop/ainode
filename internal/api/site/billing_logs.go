@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/sync/errgroup"
 )
@@ -111,7 +112,7 @@ func (h *InternalHandler) BillingLogsListHandler(w http.ResponseWriter, r *http.
 	for _, l := range logs {
 		resLogs = append(resLogs, LogItem{
 			ID:          formatUUID(l.ID),
-			Time:        l.CreatedAt.Time.Format("2006-01-02 15:04:05"),
+			Time:        utils.FormatTime(l.CreatedAt),
 			Model:       l.ModelName,
 			Input:       l.PromptTokens.Int32,
 			Output:      l.CompletionTokens.Int32,

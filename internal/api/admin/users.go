@@ -10,6 +10,7 @@ import (
 	"aihop.io/ainode/internal/api/httpx"
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/utils"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -139,9 +140,9 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 			TotalSpend:       totalSpend,
 			ActiveKeyCount:   activeKeyCount,
 			Status:           status,
-			CreatedAt:        formatTime(user.CreatedAt),
-			LastLoginAt:      formatTime(user.LastLoginAt),
-			LastRequestAt:    formatTime(user.LastRequestAt),
+			CreatedAt:        utils.FormatTime(user.CreatedAt),
+			LastLoginAt:      utils.FormatTime(user.LastLoginAt),
+			LastRequestAt:    utils.FormatTime(user.LastRequestAt),
 		})
 	}
 
@@ -223,7 +224,7 @@ func (h *AdminHandler) ListUserBalanceLogs(w http.ResponseWriter, r *http.Reques
 			OperatorAdminID: operatorAdminID,
 			OperatorName:    item.OperatorName,
 			Remark:          item.Remark,
-			CreatedAt:       formatTime(item.CreatedAt),
+			CreatedAt:       utils.FormatTime(item.CreatedAt),
 		})
 	}
 

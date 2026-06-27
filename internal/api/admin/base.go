@@ -3,10 +3,10 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"aihop.io/ainode/internal/api/httpx"
 	"aihop.io/ainode/internal/billing"
@@ -49,20 +49,10 @@ func errorResponse(w http.ResponseWriter, status int, message string) {
 	httpx.Err(w, status, status, message)
 }
 
+// centsToMoney 高精度金额转换:保留 8 位小数,与 10^8 存储刻度对齐(与 site.centsToMoneyPrecise 口径一致)。
+// 绝对精确(累加/对账)请直接用原始 amount_cents 整数。
 func centsToMoney(amount int64) float64 {
-	return float64(amount) / 100000000
-}
-
-func formatTime(value any) string {
-	switch v := value.(type) {
-	case interface{ Value() (time.Time, bool) }:
-		if ts, ok := v.Value(); ok {
-			return ts.UTC().Format(time.RFC3339)
-		}
-	case time.Time:
-		return v.UTC().Format(time.RFC3339)
-	}
-	return ""
+	return math.Round(float64(amount)/100000000.0*1e8) / 1e8
 }
 
 func readAdminOperator(r *http.Request) (int32, string) {

@@ -7,10 +7,10 @@ import (
 	"math"
 	"net/http"
 	"strings"
-	"time"
 
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -80,7 +80,7 @@ func (h *Handler) processTransaction(ctx context.Context, req transactionWebhook
 			AlreadyProcessed: true,
 			TransactionID:    existing.ID,
 			Status:           existing.Status,
-			CreatedAt:        formatTime(existing.CreatedAt),
+			CreatedAt:        utils.FormatTime(existing.CreatedAt),
 		}, http.StatusOK, ""
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return transactionProcessResult{}, http.StatusInternalServerError, "Failed to check transaction idempotency"
@@ -161,7 +161,7 @@ func (h *Handler) processTransaction(ctx context.Context, req transactionWebhook
 					AlreadyProcessed: true,
 					TransactionID:    existing.ID,
 					Status:           existing.Status,
-					CreatedAt:        formatTime(existing.CreatedAt),
+					CreatedAt:        utils.FormatTime(existing.CreatedAt),
 				}, http.StatusOK, ""
 			}
 		}
@@ -214,7 +214,7 @@ func (h *Handler) processTransaction(ctx context.Context, req transactionWebhook
 		TransactionID:    transaction.ID,
 		Status:           transaction.Status,
 		CacheSynced:      cacheSynced,
-		CreatedAt:        formatTime(transaction.CreatedAt),
+		CreatedAt:        utils.FormatTime(transaction.CreatedAt),
 	}, http.StatusOK, ""
 }
 
@@ -261,16 +261,4 @@ func errorResponse(w http.ResponseWriter, status int, message string) {
 
 func moneyToScaledInt(amount float64) int64 {
 	return int64(math.Round(amount * 100000000))
-}
-
-func formatTime(value any) string {
-	switch v := value.(type) {
-	case interface{ Value() (time.Time, bool) }:
-		if ts, ok := v.Value(); ok {
-			return ts.UTC().Format(time.RFC3339)
-		}
-	case time.Time:
-		return v.UTC().Format(time.RFC3339)
-	}
-	return ""
 }

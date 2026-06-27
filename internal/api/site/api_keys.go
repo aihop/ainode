@@ -6,28 +6,24 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func generateAPIKey() string {
-	b := make([]byte, 16)
+	b := make([]byte, 12)
 	_, _ = rand.Read(b)
-	return "sk-ainode-" + hex.EncodeToString(b)
+	return "sk-" + hex.EncodeToString(b)
 }
 
-// MaskKey 隐藏中间部分，只显示首尾 (例如 sk-test-***-001)
 func maskKey(key string) string {
-	if len(key) <= 8 {
-		return "******"
+	if len(key) < 12 {
+		return "********"
 	}
-	parts := strings.Split(key, "-")
-	if len(parts) >= 3 {
-		return parts[0] + "-" + parts[1] + "-***-" + parts[len(parts)-1]
-	}
-	return key[:4] + "***" + key[len(key)-4:]
+	// 示例：sk-6c8f9e...1234 -> sk-6c...1234
+	return key[:5] + "******" + key[len(key)-4:]
 }
 
 func (h *InternalHandler) ListAPIKeysHandler(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +93,7 @@ func (h *InternalHandler) ListAPIKeysHandler(w http.ResponseWriter, r *http.Requ
 			Scope:     modelScope,
 			Status:    status,
 			QPS:       "Unlimited",
-			CreatedAt: k.CreatedAt.Time.Format("2006-01-02 15:04"),
+			CreatedAt: utils.FormatTime(k.CreatedAt),
 			ExpiresAt: "Never", // 根据业务逻辑，如果有过期时间可以读取
 			LastUsed:  "N/A",   // 需要单独记录
 		})

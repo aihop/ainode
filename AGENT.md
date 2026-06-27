@@ -21,6 +21,7 @@
 > `2026-06-26`: 移除 schema.sql 中硬编码的 2026 年 billing_logs 分区，改为 `internal/billing/partition.go` 动态创建，启动时自动生成当前月 + 未来 6 个月分区，后台每日定时维护，见 Section 6。
 > `2026-06-26`: 激活 `api_keys.quota_limit / quota_used` Key 级硬配额：鉴权中间件在预扣费前检查 `quota_used + 预估费 > quota_limit`，结算 Worker 在写账单后递增 `quota_used`；配额单位与金额同纬（cents），0 表示不限制，见 Section 3 与 Section 4.1。
 > `2026-06-26`: 管理员 API 鉴权从硬编码 `"admin-secret-key"` 改为读取 `internal.token` 配置，见 Section 6。
+> `2026-06-27`: 新增时间与时区规范（Section 8.8）。所有 API 出口点的时间格式化必须 `.UTC()` 后输出 RFC3339；修复 stats.go trend label 遗漏 `.UTC()` 的一致性问题。
 
 ## 1. 项目定位与核心架构
 
@@ -497,6 +498,24 @@ Auth 必须在 RateLimit 之前，因为限流需要 `user_id`（从 Auth 中间
 - **订阅到期时间**统一用 `sub_expires_at`(已废弃 `grant_expires_at`)。
 - **所有对外 HTTP API 的 JSON 字段一律 camelCase**(`userId`/`eventId`/`balanceType`/`sourceId`/`amountCents`…),禁止 snake_case。这适用于 admin / site / webhook 全部接口与事件(含 `order.paid` 的 `integration.transaction`、`subscription.apply`/`subscription.cancel`)。
 - **金额**对外字段:高精度浮点(`centsToMoneyPrecise`)+ 原始整数 `xxxCents` 并存,累加/对账用整数。
+
+### 8.8 时间与时区规范 (UTC Output)
+
+> **核心原则**: 所有对外 API 返回的时间字段**必须**先转为 UTC 再格式化输出。数据库层使用 PostgreSQL `TIMESTAMP WITH TIME ZONE`（本质存 UTC）。Go 后端不存储用户级时区配置——前端由 APayShop 根据 `settings.timezone` 渲染。
+
+#### 统一格式化入口
+
+- **唯一出口**: `internal/utils/time.go` 提供的 `utils.FormatTime(value any) string` 是**全项目唯一的 UTC 时间格式化函数**。
+- **支持类型**: `time.Time` 和 `pgtype.Timestamptz` 等实现了 `Value() (time.Time, bool)` 接口的类型。
+- **输出格式**: RFC3339 UTC（如 `"2026-06-27T08:30:00Z"`）。
+- **绝对禁止**在各包中重复定义 `formatTime()` 或手写 `.UTC().Format(time.RFC3339)` 内联调用。
+- **已由该函数覆盖的包**: `admin`, `site`, `webhook`。
+
+#### 与 APayShop 的分工
+
+- **Go 后端职责**: 存储 UTC、输出 UTC（统一通过 `utils.FormatTime`）。
+- **APayShop 前端职责**: 按 `settings.timezone` 配置渲染为本地时区显示（`useFormatTime()` composable）。
+- 当前 Go 后端不存储用户时区配置，也不做时区转换——这一层由 APayShop 的服务端代理层与前端组合完成。
 
 ---
 

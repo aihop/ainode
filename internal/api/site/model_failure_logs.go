@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/sync/errgroup"
 )
@@ -119,7 +120,7 @@ func (h *InternalHandler) ModelFailureLogsListHandler(w http.ResponseWriter, r *
 			Response:    l.ResponseBody,
 			LatencyMs:   l.LatencyMs,
 			IsRetryable: l.IsRetryable,
-			Time:        l.CreatedAt.Time.Format(time.RFC3339),
+			Time:        utils.FormatTime(l.CreatedAt),
 		}
 		if l.ApiKeyID.Valid {
 			item.APIKeyID = l.ApiKeyID.Int32

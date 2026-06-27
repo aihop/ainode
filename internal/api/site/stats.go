@@ -155,7 +155,7 @@ func (h *InternalHandler) StatsHandler(w http.ResponseWriter, r *http.Request) {
 	for _, t := range trendSeries {
 		label := ""
 		if t.Date.Valid {
-			label = t.Date.Time.Format("01-02")
+			label = t.Date.Time.UTC().Format("01-02")
 		}
 		trends = append(trends, TrendItem{
 			Key:      label,

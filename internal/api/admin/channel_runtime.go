@@ -7,6 +7,7 @@ import (
 	"aihop.io/ainode/internal/api/httpx"
 	"aihop.io/ainode/internal/channel"
 	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/utils"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -86,8 +87,8 @@ func (h *AdminHandler) ListChannelHealth(w http.ResponseWriter, r *http.Request)
 			ConsecutiveFailures: snapshot.FailureCount,
 			ProbeInFlight:       snapshot.ProbeInFlight,
 			CooldownSeconds:     snapshot.CooldownSeconds,
-			LastFailureAt:       formatTime(snapshot.LastFailureAt),
-			LastSuccessAt:       formatTime(snapshot.LastSuccessAt),
+			LastFailureAt:       utils.FormatTime(snapshot.LastFailureAt),
+			LastSuccessAt:       utils.FormatTime(snapshot.LastSuccessAt),
 		})
 	}
 
@@ -173,7 +174,7 @@ func (h *AdminHandler) ListChannelFailureLogs(w http.ResponseWriter, r *http.Req
 			ErrorMessage:    item.ErrorMessage,
 			LatencyMs:       item.LatencyMs,
 			CircuitState:    item.CircuitState,
-			CreatedAt:       formatTime(item.CreatedAt),
+			CreatedAt:       utils.FormatTime(item.CreatedAt),
 		})
 	}
 

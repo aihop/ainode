@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"aihop.io/ainode/internal/db"
+	"aihop.io/ainode/internal/utils"
 )
 
 func (h *InternalHandler) BalanceLogsListHandler(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +75,7 @@ func (h *InternalHandler) BalanceLogsListHandler(w http.ResponseWriter, r *http.
 		}
 		createdAt := ""
 		if item.CreatedAt.Valid {
-			createdAt = item.CreatedAt.Time.Format("2006-01-02 15:04:05")
+			createdAt = utils.FormatTime(item.CreatedAt)
 		}
 
 		resLogs = append(resLogs, LogItem{
