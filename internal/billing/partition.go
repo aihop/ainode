@@ -49,6 +49,13 @@ func EnsureBillingLogPartitions(ctx context.Context, pool *pgxpool.Pool, monthsA
 			return fmt.Errorf("failed to create partition %s: %w", partitionName, err)
 		}
 
+		// 确保分区 owner 与当前连接用户一致,防止后续 ALTER TABLE 父表时
+		// 因 owner 不一致导致 "must be owner of table" (SQLSTATE 42501)。
+		ownerSQL := fmt.Sprintf(`ALTER TABLE %s OWNER TO current_user`, partitionName)
+		if _, err := pool.Exec(ctx, ownerSQL); err != nil {
+			log.Printf("WARNING: failed to set owner for partition %s: %v", partitionName, err)
+		}
+
 		log.Printf("Ensured billing_logs partition: %s (%s ~ %s)", partitionName, startStr, endStr)
 	}
 

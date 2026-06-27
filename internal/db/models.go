@@ -9,171 +9,180 @@ import (
 )
 
 type ApiKey struct {
-	ID            int32
-	Name          string
-	KeyString     string
-	UserID        pgtype.Int4
-	OrderID       pgtype.Text
-	ProductID     pgtype.Int4
-	TierLevel     pgtype.Int4
-	QuotaLimit    pgtype.Int8
-	QuotaUsed     pgtype.Int8
-	AllowedModels []byte
-	Status        pgtype.Int4
-	CreatedAt     pgtype.Timestamptz
+	ID            int32              `json:"id"`
+	Name          string             `json:"name"`
+	KeyString     string             `json:"keyString"`
+	UserID        pgtype.Int4        `json:"userId"`
+	OrderID       pgtype.Text        `json:"orderId"`
+	ProductID     pgtype.Int4        `json:"productId"`
+	TierLevel     pgtype.Int4        `json:"tierLevel"`
+	QuotaLimit    pgtype.Int8        `json:"quotaLimit"`
+	QuotaUsed     pgtype.Int8        `json:"quotaUsed"`
+	AllowedModels []byte             `json:"allowedModels"`
+	Status        pgtype.Int4        `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"createdAt"`
 }
 
 type AsyncTask struct {
-	ID               string
-	UserID           int32
-	ChannelID        pgtype.Int4
-	RequestID        string
-	TaskType         string
-	Provider         string
-	ModelName        string
-	Status           string
-	UpstreamTaskID   pgtype.Text
-	InputPayload     []byte
-	OutputPayload    []byte
-	ErrorPayload     []byte
-	Metadata         []byte
-	PreDeductedCents int64
-	GrantDeducted    int64
-	CashDeducted     int64
-	ActualCostCents  int64
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	SubmittedAt      pgtype.Timestamptz
-	FinishedAt       pgtype.Timestamptz
-	CanceledAt       pgtype.Timestamptz
-	SubDeducted      int64
+	ID               string             `json:"id"`
+	UserID           int32              `json:"userId"`
+	ChannelID        pgtype.Int4        `json:"channelId"`
+	RequestID        string             `json:"requestId"`
+	TaskType         string             `json:"taskType"`
+	Provider         string             `json:"provider"`
+	ModelName        string             `json:"modelName"`
+	Status           string             `json:"status"`
+	UpstreamTaskID   pgtype.Text        `json:"upstreamTaskId"`
+	InputPayload     []byte             `json:"inputPayload"`
+	OutputPayload    []byte             `json:"outputPayload"`
+	ErrorPayload     []byte             `json:"errorPayload"`
+	Metadata         []byte             `json:"metadata"`
+	PreDeductedCents int64              `json:"preDeductedCents"`
+	GrantDeducted    int64              `json:"grantDeducted"`
+	CashDeducted     int64              `json:"cashDeducted"`
+	ActualCostCents  int64              `json:"actualCostCents"`
+	CreatedAt        pgtype.Timestamptz `json:"createdAt"`
+	UpdatedAt        pgtype.Timestamptz `json:"updatedAt"`
+	SubmittedAt      pgtype.Timestamptz `json:"submittedAt"`
+	FinishedAt       pgtype.Timestamptz `json:"finishedAt"`
+	CanceledAt       pgtype.Timestamptz `json:"canceledAt"`
+	SubDeducted      int64              `json:"subDeducted"`
 }
 
 type BalanceLog struct {
-	ID                 int64
-	TransactionID      pgtype.Int8
-	UserID             int32
-	BalanceType        string
-	ActionType         string
-	AmountCents        int64
-	BeforeBalanceCents int64
-	AfterBalanceCents  int64
-	OperatorAdminID    pgtype.Int4
-	OperatorName       string
-	Remark             string
-	CreatedAt          pgtype.Timestamptz
+	ID                 int64              `json:"id"`
+	TransactionID      pgtype.Int8        `json:"transactionId"`
+	UserID             int32              `json:"userId"`
+	BalanceType        string             `json:"balanceType"`
+	ActionType         string             `json:"actionType"`
+	AmountCents        int64              `json:"amountCents"`
+	BeforeBalanceCents int64              `json:"beforeBalanceCents"`
+	AfterBalanceCents  int64              `json:"afterBalanceCents"`
+	OperatorAdminID    pgtype.Int4        `json:"operatorAdminId"`
+	OperatorName       string             `json:"operatorName"`
+	Remark             string             `json:"remark"`
+	CreatedAt          pgtype.Timestamptz `json:"createdAt"`
 }
 
 type BillingLog struct {
-	ID               pgtype.UUID
-	UserID           pgtype.Int4
-	ChannelID        pgtype.Int4
-	ModelName        string
-	PromptTokens     pgtype.Int4
-	CompletionTokens pgtype.Int4
-	CacheHitTokens   pgtype.Int4
-	CacheMissTokens  pgtype.Int4
-	AmountCents      int64
-	LogType          string
-	PreDeductedCents int64
-	RequestID        pgtype.Text
-	CreatedAt        pgtype.Timestamptz
+	ID               pgtype.UUID        `json:"id"`
+	UserID           pgtype.Int4        `json:"userId"`
+	ChannelID        pgtype.Int4        `json:"channelId"`
+	ModelName        string             `json:"modelName"`
+	PromptTokens     pgtype.Int4        `json:"promptTokens"`
+	CompletionTokens pgtype.Int4        `json:"completionTokens"`
+	CacheHitTokens   pgtype.Int4        `json:"cacheHitTokens"`
+	CacheMissTokens  pgtype.Int4        `json:"cacheMissTokens"`
+	AmountCents      int64              `json:"amountCents"`
+	LogType          string             `json:"logType"`
+	PreDeductedCents int64              `json:"preDeductedCents"`
+	RequestID        pgtype.Text        `json:"requestId"`
+	CreatedAt        pgtype.Timestamptz `json:"createdAt"`
 }
 
 type Channel struct {
-	ID            int32
-	Name          string
-	Provider      string
-	BaseUrl       string
-	ApiKey        string
-	Models        string
-	ProtocolType  string
-	UploadMode    string
-	ModelMapping  []byte
-	SupportsAsync bool
-	Weight        pgtype.Int4
-	Status        pgtype.Int4
+	ID            int32       `json:"id"`
+	Name          string      `json:"name"`
+	Provider      string      `json:"provider"`
+	BaseUrl       string      `json:"baseUrl"`
+	ApiKey        string      `json:"apiKey"`
+	Models        string      `json:"models"`
+	ProtocolType  string      `json:"protocolType"`
+	UploadMode    string      `json:"uploadMode"`
+	ModelMapping  []byte      `json:"modelMapping"`
+	SupportsAsync bool        `json:"supportsAsync"`
+	Weight        pgtype.Int4 `json:"weight"`
+	Status        pgtype.Int4 `json:"status"`
 }
 
 type ChannelFailureLog struct {
-	ID              int64
-	ChannelID       int32
-	RequestID       string
-	ModelName       string
-	Provider        string
-	UpstreamBaseUrl string
-	ErrorType       string
-	StatusCode      int32
-	ResponseBody    string
-	ErrorMessage    string
-	LatencyMs       int32
-	CircuitState    string
-	CreatedAt       pgtype.Timestamptz
+	ID              int64              `json:"id"`
+	ChannelID       int32              `json:"channelId"`
+	RequestID       string             `json:"requestId"`
+	ModelName       string             `json:"modelName"`
+	Provider        string             `json:"provider"`
+	UpstreamBaseUrl string             `json:"upstreamBaseUrl"`
+	ErrorType       string             `json:"errorType"`
+	StatusCode      int32              `json:"statusCode"`
+	ResponseBody    string             `json:"responseBody"`
+	ErrorMessage    string             `json:"errorMessage"`
+	LatencyMs       int32              `json:"latencyMs"`
+	CircuitState    string             `json:"circuitState"`
+	CreatedAt       pgtype.Timestamptz `json:"createdAt"`
 }
 
 type Model struct {
-	ID                  int32
-	ModelName           string
-	InputPriceCents     int64
-	OutputPriceCents    int64
-	CacheHitPriceCents  int64
-	CacheMissPriceCents int64
-	Multiplier          float32
-	BillingPolicy       string
-	Modality            string
-	PricingMode         string
-	PricingConfig       []byte
-	MaxConcurrency      int32
-	Status              pgtype.Int4
+	ID                  int32       `json:"id"`
+	ModelName           string      `json:"modelName"`
+	InputPriceCents     int64       `json:"inputPriceCents"`
+	OutputPriceCents    int64       `json:"outputPriceCents"`
+	CacheHitPriceCents  int64       `json:"cacheHitPriceCents"`
+	CacheMissPriceCents int64       `json:"cacheMissPriceCents"`
+	Multiplier          float32     `json:"multiplier"`
+	BillingPolicy       string      `json:"billingPolicy"`
+	Modality            string      `json:"modality"`
+	PricingMode         string      `json:"pricingMode"`
+	PricingConfig       []byte      `json:"pricingConfig"`
+	MaxConcurrency      int32       `json:"maxConcurrency"`
+	Status              pgtype.Int4 `json:"status"`
 }
 
 type ModelFailureLog struct {
-	ID           int64
-	UserID       int32
-	ApiKeyID     pgtype.Int4
-	RequestID    string
-	ModelName    string
-	Provider     string
-	ErrorType    string
-	ErrorCode    string
-	StatusCode   int32
-	ErrorMessage string
-	ResponseBody string
-	LatencyMs    int32
-	IsRetryable  bool
-	CreatedAt    pgtype.Timestamptz
+	ID           int64              `json:"id"`
+	UserID       int32              `json:"userId"`
+	ApiKeyID     pgtype.Int4        `json:"apiKeyId"`
+	RequestID    string             `json:"requestId"`
+	ModelName    string             `json:"modelName"`
+	Provider     string             `json:"provider"`
+	ErrorType    string             `json:"errorType"`
+	ErrorCode    string             `json:"errorCode"`
+	StatusCode   int32              `json:"statusCode"`
+	ErrorMessage string             `json:"errorMessage"`
+	ResponseBody string             `json:"responseBody"`
+	LatencyMs    int32              `json:"latencyMs"`
+	IsRetryable  bool               `json:"isRetryable"`
+	CreatedAt    pgtype.Timestamptz `json:"createdAt"`
+}
+
+type SettlementOutbox struct {
+	ID          int64              `json:"id"`
+	RequestID   string             `json:"requestId"`
+	Payload     []byte             `json:"payload"`
+	Attempts    int32              `json:"attempts"`
+	CreatedAt   pgtype.Timestamptz `json:"createdAt"`
+	ProcessedAt pgtype.Timestamptz `json:"processedAt"`
 }
 
 type Transaction struct {
-	ID                 int64
-	UserID             int32
-	EventID            pgtype.Text
-	Type               string
-	BalanceType        string
-	Direction          string
-	AmountCents        int64
-	BeforeBalanceCents int64
-	AfterBalanceCents  int64
-	SourceType         string
-	SourceID           string
-	Status             string
-	Remark             string
-	Metadata           []byte
-	CreatedAt          pgtype.Timestamptz
+	ID                 int64              `json:"id"`
+	UserID             int32              `json:"userId"`
+	EventID            pgtype.Text        `json:"eventId"`
+	Type               string             `json:"type"`
+	BalanceType        string             `json:"balanceType"`
+	Direction          string             `json:"direction"`
+	AmountCents        int64              `json:"amountCents"`
+	BeforeBalanceCents int64              `json:"beforeBalanceCents"`
+	AfterBalanceCents  int64              `json:"afterBalanceCents"`
+	SourceType         string             `json:"sourceType"`
+	SourceID           string             `json:"sourceId"`
+	Status             string             `json:"status"`
+	Remark             string             `json:"remark"`
+	Metadata           []byte             `json:"metadata"`
+	CreatedAt          pgtype.Timestamptz `json:"createdAt"`
 }
 
 type User struct {
-	ID           int32
-	Email        string
-	PasswordHash string
-	Nickname     pgtype.Text
-	AvatarUrl    pgtype.Text
-	CashBalance  pgtype.Int8
-	GrantBalance pgtype.Int8
-	TierLevel    pgtype.Int4
-	Status       pgtype.Int4
-	LastLoginAt  pgtype.Timestamptz
-	CreatedAt    pgtype.Timestamptz
-	SubBalance   int64
-	SubExpiresAt pgtype.Timestamptz
+	ID           int32              `json:"id"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"passwordHash"`
+	Nickname     pgtype.Text        `json:"nickname"`
+	AvatarUrl    pgtype.Text        `json:"avatarUrl"`
+	CashBalance  pgtype.Int8        `json:"cashBalance"`
+	GrantBalance pgtype.Int8        `json:"grantBalance"`
+	TierLevel    pgtype.Int4        `json:"tierLevel"`
+	Status       pgtype.Int4        `json:"status"`
+	LastLoginAt  pgtype.Timestamptz `json:"lastLoginAt"`
+	CreatedAt    pgtype.Timestamptz `json:"createdAt"`
+	SubBalance   int64              `json:"subBalance"`
+	SubExpiresAt pgtype.Timestamptz `json:"subExpiresAt"`
 }

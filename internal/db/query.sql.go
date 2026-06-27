@@ -84,9 +84,9 @@ WHERE user_id = $1
 `
 
 type CountUserBillingLogsParams struct {
-	UserID    pgtype.Int4
-	ModelName string
-	StartTime pgtype.Timestamptz
+	UserID    pgtype.Int4        `json:"userId"`
+	ModelName string             `json:"modelName"`
+	StartTime pgtype.Timestamptz `json:"startTime"`
 }
 
 func (q *Queries) CountUserBillingLogs(ctx context.Context, arg CountUserBillingLogsParams) (int64, error) {
@@ -105,9 +105,9 @@ WHERE user_id = $1
 `
 
 type CountUserModelFailureLogsParams struct {
-	UserID    int32
-	ModelName string
-	StartTime pgtype.Timestamptz
+	UserID    int32              `json:"userId"`
+	ModelName string             `json:"modelName"`
+	StartTime pgtype.Timestamptz `json:"startTime"`
 }
 
 func (q *Queries) CountUserModelFailureLogs(ctx context.Context, arg CountUserModelFailureLogsParams) (int64, error) {
@@ -149,21 +149,21 @@ INSERT INTO api_keys (
 `
 
 type CreateAPIKeyParams struct {
-	Name          string
-	KeyString     string
-	UserID        pgtype.Int4
-	AllowedModels []byte
-	Status        pgtype.Int4
-	TierLevel     pgtype.Int4
+	Name          string      `json:"name"`
+	KeyString     string      `json:"keyString"`
+	UserID        pgtype.Int4 `json:"userId"`
+	AllowedModels []byte      `json:"allowedModels"`
+	Status        pgtype.Int4 `json:"status"`
+	TierLevel     pgtype.Int4 `json:"tierLevel"`
 }
 
 type CreateAPIKeyRow struct {
-	ID            int32
-	Name          string
-	KeyString     string
-	AllowedModels []byte
-	Status        pgtype.Int4
-	CreatedAt     pgtype.Timestamptz
+	ID            int32              `json:"id"`
+	Name          string             `json:"name"`
+	KeyString     string             `json:"keyString"`
+	AllowedModels []byte             `json:"allowedModels"`
+	Status        pgtype.Int4        `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"createdAt"`
 }
 
 func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (CreateAPIKeyRow, error) {
@@ -231,23 +231,23 @@ VALUES (
 `
 
 type CreateAsyncTaskParams struct {
-	ID               string
-	UserID           int32
-	ChannelID        pgtype.Int4
-	RequestID        string
-	TaskType         string
-	Provider         string
-	ModelName        string
-	Status           string
-	UpstreamTaskID   pgtype.Text
-	InputPayload     []byte
-	OutputPayload    []byte
-	ErrorPayload     []byte
-	Metadata         []byte
-	PreDeductedCents int64
-	GrantDeducted    int64
-	CashDeducted     int64
-	ActualCostCents  int64
+	ID               string      `json:"id"`
+	UserID           int32       `json:"userId"`
+	ChannelID        pgtype.Int4 `json:"channelId"`
+	RequestID        string      `json:"requestId"`
+	TaskType         string      `json:"taskType"`
+	Provider         string      `json:"provider"`
+	ModelName        string      `json:"modelName"`
+	Status           string      `json:"status"`
+	UpstreamTaskID   pgtype.Text `json:"upstreamTaskId"`
+	InputPayload     []byte      `json:"inputPayload"`
+	OutputPayload    []byte      `json:"outputPayload"`
+	ErrorPayload     []byte      `json:"errorPayload"`
+	Metadata         []byte      `json:"metadata"`
+	PreDeductedCents int64       `json:"preDeductedCents"`
+	GrantDeducted    int64       `json:"grantDeducted"`
+	CashDeducted     int64       `json:"cashDeducted"`
+	ActualCostCents  int64       `json:"actualCostCents"`
 }
 
 // ==========================================
@@ -320,16 +320,16 @@ INSERT INTO balance_logs (
 `
 
 type CreateBalanceLogParams struct {
-	TransactionID      pgtype.Int8
-	UserID             int32
-	BalanceType        string
-	ActionType         string
-	AmountCents        int64
-	BeforeBalanceCents int64
-	AfterBalanceCents  int64
-	OperatorAdminID    pgtype.Int4
-	OperatorName       string
-	Remark             string
+	TransactionID      pgtype.Int8 `json:"transactionId"`
+	UserID             int32       `json:"userId"`
+	BalanceType        string      `json:"balanceType"`
+	ActionType         string      `json:"actionType"`
+	AmountCents        int64       `json:"amountCents"`
+	BeforeBalanceCents int64       `json:"beforeBalanceCents"`
+	AfterBalanceCents  int64       `json:"afterBalanceCents"`
+	OperatorAdminID    pgtype.Int4 `json:"operatorAdminId"`
+	OperatorName       string      `json:"operatorName"`
+	Remark             string      `json:"remark"`
 }
 
 func (q *Queries) CreateBalanceLog(ctx context.Context, arg CreateBalanceLogParams) error {
@@ -381,18 +381,18 @@ VALUES (
 `
 
 type CreateBillingLogParams struct {
-	ID               pgtype.UUID
-	UserID           pgtype.Int4
-	ChannelID        pgtype.Int4
-	ModelName        string
-	PromptTokens     pgtype.Int4
-	CompletionTokens pgtype.Int4
-	CacheHitTokens   pgtype.Int4
-	CacheMissTokens  pgtype.Int4
-	AmountCents      int64
-	LogType          string
-	PreDeductedCents int64
-	RequestID        pgtype.Text
+	ID               pgtype.UUID `json:"id"`
+	UserID           pgtype.Int4 `json:"userId"`
+	ChannelID        pgtype.Int4 `json:"channelId"`
+	ModelName        string      `json:"modelName"`
+	PromptTokens     pgtype.Int4 `json:"promptTokens"`
+	CompletionTokens pgtype.Int4 `json:"completionTokens"`
+	CacheHitTokens   pgtype.Int4 `json:"cacheHitTokens"`
+	CacheMissTokens  pgtype.Int4 `json:"cacheMissTokens"`
+	AmountCents      int64       `json:"amountCents"`
+	LogType          string      `json:"logType"`
+	PreDeductedCents int64       `json:"preDeductedCents"`
+	RequestID        pgtype.Text `json:"requestId"`
 }
 
 func (q *Queries) CreateBillingLog(ctx context.Context, arg CreateBillingLogParams) (BillingLog, error) {
@@ -449,17 +449,17 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, name, provid
 `
 
 type CreateChannelParams struct {
-	Name          string
-	Provider      string
-	BaseUrl       string
-	ApiKey        string
-	Weight        pgtype.Int4
-	Models        string
-	ProtocolType  string
-	UploadMode    string
-	ModelMapping  []byte
-	SupportsAsync bool
-	Status        pgtype.Int4
+	Name          string      `json:"name"`
+	Provider      string      `json:"provider"`
+	BaseUrl       string      `json:"baseUrl"`
+	ApiKey        string      `json:"apiKey"`
+	Weight        pgtype.Int4 `json:"weight"`
+	Models        string      `json:"models"`
+	ProtocolType  string      `json:"protocolType"`
+	UploadMode    string      `json:"uploadMode"`
+	ModelMapping  []byte      `json:"modelMapping"`
+	SupportsAsync bool        `json:"supportsAsync"`
+	Status        pgtype.Int4 `json:"status"`
 }
 
 // ==========================================
@@ -516,17 +516,17 @@ INSERT INTO channel_failure_logs (
 `
 
 type CreateChannelFailureLogParams struct {
-	ChannelID       int32
-	RequestID       string
-	ModelName       string
-	Provider        string
-	UpstreamBaseUrl string
-	ErrorType       string
-	StatusCode      int32
-	ResponseBody    string
-	ErrorMessage    string
-	LatencyMs       int32
-	CircuitState    string
+	ChannelID       int32  `json:"channelId"`
+	RequestID       string `json:"requestId"`
+	ModelName       string `json:"modelName"`
+	Provider        string `json:"provider"`
+	UpstreamBaseUrl string `json:"upstreamBaseUrl"`
+	ErrorType       string `json:"errorType"`
+	StatusCode      int32  `json:"statusCode"`
+	ResponseBody    string `json:"responseBody"`
+	ErrorMessage    string `json:"errorMessage"`
+	LatencyMs       int32  `json:"latencyMs"`
+	CircuitState    string `json:"circuitState"`
 }
 
 func (q *Queries) CreateChannelFailureLog(ctx context.Context, arg CreateChannelFailureLogParams) error {
@@ -579,18 +579,18 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING
 `
 
 type CreateModelParams struct {
-	ModelName           string
-	InputPriceCents     int64
-	OutputPriceCents    int64
-	CacheHitPriceCents  int64
-	CacheMissPriceCents int64
-	Multiplier          float32
-	BillingPolicy       string
-	Modality            string
-	PricingMode         string
-	PricingConfig       []byte
-	MaxConcurrency      int32
-	Status              pgtype.Int4
+	ModelName           string      `json:"modelName"`
+	InputPriceCents     int64       `json:"inputPriceCents"`
+	OutputPriceCents    int64       `json:"outputPriceCents"`
+	CacheHitPriceCents  int64       `json:"cacheHitPriceCents"`
+	CacheMissPriceCents int64       `json:"cacheMissPriceCents"`
+	Multiplier          float32     `json:"multiplier"`
+	BillingPolicy       string      `json:"billingPolicy"`
+	Modality            string      `json:"modality"`
+	PricingMode         string      `json:"pricingMode"`
+	PricingConfig       []byte      `json:"pricingConfig"`
+	MaxConcurrency      int32       `json:"maxConcurrency"`
+	Status              pgtype.Int4 `json:"status"`
 }
 
 func (q *Queries) CreateModel(ctx context.Context, arg CreateModelParams) (Model, error) {
@@ -647,18 +647,18 @@ INSERT INTO model_failure_logs (
 `
 
 type CreateModelFailureLogParams struct {
-	UserID       int32
-	ApiKeyID     pgtype.Int4
-	RequestID    string
-	ModelName    string
-	Provider     string
-	ErrorType    string
-	ErrorCode    string
-	StatusCode   int32
-	ErrorMessage string
-	ResponseBody string
-	LatencyMs    int32
-	IsRetryable  bool
+	UserID       int32       `json:"userId"`
+	ApiKeyID     pgtype.Int4 `json:"apiKeyId"`
+	RequestID    string      `json:"requestId"`
+	ModelName    string      `json:"modelName"`
+	Provider     string      `json:"provider"`
+	ErrorType    string      `json:"errorType"`
+	ErrorCode    string      `json:"errorCode"`
+	StatusCode   int32       `json:"statusCode"`
+	ErrorMessage string      `json:"errorMessage"`
+	ResponseBody string      `json:"responseBody"`
+	LatencyMs    int32       `json:"latencyMs"`
+	IsRetryable  bool        `json:"isRetryable"`
 }
 
 func (q *Queries) CreateModelFailureLog(ctx context.Context, arg CreateModelFailureLogParams) error {
@@ -715,19 +715,19 @@ INSERT INTO transactions (
 `
 
 type CreateTransactionParams struct {
-	UserID             int32
-	EventID            pgtype.Text
-	Type               string
-	BalanceType        string
-	Direction          string
-	AmountCents        int64
-	BeforeBalanceCents int64
-	AfterBalanceCents  int64
-	SourceType         string
-	SourceID           string
-	Status             string
-	Remark             string
-	Metadata           []byte
+	UserID             int32       `json:"userId"`
+	EventID            pgtype.Text `json:"eventId"`
+	Type               string      `json:"type"`
+	BalanceType        string      `json:"balanceType"`
+	Direction          string      `json:"direction"`
+	AmountCents        int64       `json:"amountCents"`
+	BeforeBalanceCents int64       `json:"beforeBalanceCents"`
+	AfterBalanceCents  int64       `json:"afterBalanceCents"`
+	SourceType         string      `json:"sourceType"`
+	SourceID           string      `json:"sourceId"`
+	Status             string      `json:"status"`
+	Remark             string      `json:"remark"`
+	Metadata           []byte      `json:"metadata"`
 }
 
 func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error) {
@@ -772,8 +772,8 @@ DELETE FROM api_keys WHERE id = $1 AND user_id = $2
 `
 
 type DeleteAPIKeyParams struct {
-	ID     int32
-	UserID pgtype.Int4
+	ID     int32       `json:"id"`
+	UserID pgtype.Int4 `json:"userId"`
 }
 
 func (q *Queries) DeleteAPIKey(ctx context.Context, arg DeleteAPIKeyParams) error {
@@ -809,8 +809,8 @@ LIMIT 1
 `
 
 type GetAsyncTaskByIDAndUserParams struct {
-	ID     string
-	UserID int32
+	ID     string `json:"id"`
+	UserID int32  `json:"userId"`
 }
 
 func (q *Queries) GetAsyncTaskByIDAndUser(ctx context.Context, arg GetAsyncTaskByIDAndUserParams) (AsyncTask, error) {
@@ -960,17 +960,17 @@ ORDER BY created_at DESC
 `
 
 type GetUserAPIKeysRow struct {
-	ID            int32
-	Name          string
-	KeyString     string
-	OrderID       pgtype.Text
-	ProductID     pgtype.Int4
-	TierLevel     pgtype.Int4
-	QuotaLimit    pgtype.Int8
-	QuotaUsed     pgtype.Int8
-	AllowedModels []byte
-	Status        pgtype.Int4
-	CreatedAt     pgtype.Timestamptz
+	ID            int32              `json:"id"`
+	Name          string             `json:"name"`
+	KeyString     string             `json:"keyString"`
+	OrderID       pgtype.Text        `json:"orderId"`
+	ProductID     pgtype.Int4        `json:"productId"`
+	TierLevel     pgtype.Int4        `json:"tierLevel"`
+	QuotaLimit    pgtype.Int8        `json:"quotaLimit"`
+	QuotaUsed     pgtype.Int8        `json:"quotaUsed"`
+	AllowedModels []byte             `json:"allowedModels"`
+	Status        pgtype.Int4        `json:"status"`
+	CreatedAt     pgtype.Timestamptz `json:"createdAt"`
 }
 
 func (q *Queries) GetUserAPIKeys(ctx context.Context, userID pgtype.Int4) ([]GetUserAPIKeysRow, error) {
@@ -1026,24 +1026,24 @@ LIMIT $5 OFFSET $4
 `
 
 type GetUserBillingLogsParams struct {
-	UserID    pgtype.Int4
-	ModelName string
-	StartTime pgtype.Timestamptz
-	OffsetVal int32
-	LimitVal  int32
+	UserID    pgtype.Int4        `json:"userId"`
+	ModelName string             `json:"modelName"`
+	StartTime pgtype.Timestamptz `json:"startTime"`
+	OffsetVal int32              `json:"offsetVal"`
+	LimitVal  int32              `json:"limitVal"`
 }
 
 type GetUserBillingLogsRow struct {
-	ID               pgtype.UUID
-	CreatedAt        pgtype.Timestamptz
-	ModelName        string
-	PromptTokens     pgtype.Int4
-	CompletionTokens pgtype.Int4
-	CacheHitTokens   pgtype.Int4
-	CacheMissTokens  pgtype.Int4
-	AmountCents      int64
-	LogType          string
-	PreDeductedCents int64
+	ID               pgtype.UUID        `json:"id"`
+	CreatedAt        pgtype.Timestamptz `json:"createdAt"`
+	ModelName        string             `json:"modelName"`
+	PromptTokens     pgtype.Int4        `json:"promptTokens"`
+	CompletionTokens pgtype.Int4        `json:"completionTokens"`
+	CacheHitTokens   pgtype.Int4        `json:"cacheHitTokens"`
+	CacheMissTokens  pgtype.Int4        `json:"cacheMissTokens"`
+	AmountCents      int64              `json:"amountCents"`
+	LogType          string             `json:"logType"`
+	PreDeductedCents int64              `json:"preDeductedCents"`
 }
 
 func (q *Queries) GetUserBillingLogs(ctx context.Context, arg GetUserBillingLogsParams) ([]GetUserBillingLogsRow, error) {
@@ -1118,29 +1118,29 @@ LIMIT 1
 `
 
 type GetUserByAPIKeyRow struct {
-	ID            int32
-	Email         string
-	PasswordHash  string
-	Nickname      pgtype.Text
-	AvatarUrl     pgtype.Text
-	CashBalance   pgtype.Int8
-	GrantBalance  pgtype.Int8
-	SubBalance    int64
-	UserTier      pgtype.Int4
-	SubExpiresAt  pgtype.Timestamptz
-	Status        pgtype.Int4
-	LastLoginAt   pgtype.Timestamptz
-	CreatedAt     pgtype.Timestamptz
-	KeyID         int32
-	KeyName       string
-	KeyString     string
-	OrderID       pgtype.Text
-	ProductID     pgtype.Int4
-	KeyTier       pgtype.Int4
-	QuotaLimit    pgtype.Int8
-	QuotaUsed     pgtype.Int8
-	AllowedModels []byte
-	KeyStatus     pgtype.Int4
+	ID            int32              `json:"id"`
+	Email         string             `json:"email"`
+	PasswordHash  string             `json:"passwordHash"`
+	Nickname      pgtype.Text        `json:"nickname"`
+	AvatarUrl     pgtype.Text        `json:"avatarUrl"`
+	CashBalance   pgtype.Int8        `json:"cashBalance"`
+	GrantBalance  pgtype.Int8        `json:"grantBalance"`
+	SubBalance    int64              `json:"subBalance"`
+	UserTier      pgtype.Int4        `json:"userTier"`
+	SubExpiresAt  pgtype.Timestamptz `json:"subExpiresAt"`
+	Status        pgtype.Int4        `json:"status"`
+	LastLoginAt   pgtype.Timestamptz `json:"lastLoginAt"`
+	CreatedAt     pgtype.Timestamptz `json:"createdAt"`
+	KeyID         int32              `json:"keyId"`
+	KeyName       string             `json:"keyName"`
+	KeyString     string             `json:"keyString"`
+	OrderID       pgtype.Text        `json:"orderId"`
+	ProductID     pgtype.Int4        `json:"productId"`
+	KeyTier       pgtype.Int4        `json:"keyTier"`
+	QuotaLimit    pgtype.Int8        `json:"quotaLimit"`
+	QuotaUsed     pgtype.Int8        `json:"quotaUsed"`
+	AllowedModels []byte             `json:"allowedModels"`
+	KeyStatus     pgtype.Int4        `json:"keyStatus"`
 }
 
 func (q *Queries) GetUserByAPIKey(ctx context.Context, keyString string) (GetUserByAPIKeyRow, error) {
@@ -1249,11 +1249,11 @@ LIMIT $5 OFFSET $4
 `
 
 type GetUserModelFailureLogsParams struct {
-	UserID    int32
-	ModelName string
-	StartTime pgtype.Timestamptz
-	OffsetVal int32
-	LimitVal  int32
+	UserID    int32              `json:"userId"`
+	ModelName string             `json:"modelName"`
+	StartTime pgtype.Timestamptz `json:"startTime"`
+	OffsetVal int32              `json:"offsetVal"`
+	LimitVal  int32              `json:"limitVal"`
 }
 
 func (q *Queries) GetUserModelFailureLogs(ctx context.Context, arg GetUserModelFailureLogsParams) ([]ModelFailureLog, error) {
@@ -1309,14 +1309,14 @@ ORDER BY total_amount DESC
 `
 
 type GetUserModelStatsParams struct {
-	UserID    pgtype.Int4
-	CreatedAt pgtype.Timestamptz
+	UserID    pgtype.Int4        `json:"userId"`
+	CreatedAt pgtype.Timestamptz `json:"createdAt"`
 }
 
 type GetUserModelStatsRow struct {
-	ModelName    string
-	RequestCount int64
-	TotalAmount  int64
+	ModelName    string `json:"modelName"`
+	RequestCount int64  `json:"requestCount"`
+	TotalAmount  int64  `json:"totalAmount"`
 }
 
 func (q *Queries) GetUserModelStats(ctx context.Context, arg GetUserModelStatsParams) ([]GetUserModelStatsRow, error) {
@@ -1352,16 +1352,16 @@ WHERE user_id = $1 AND created_at >= $2
 `
 
 type GetUserStatsSummaryParams struct {
-	UserID    pgtype.Int4
-	CreatedAt pgtype.Timestamptz
+	UserID    pgtype.Int4        `json:"userId"`
+	CreatedAt pgtype.Timestamptz `json:"createdAt"`
 }
 
 type GetUserStatsSummaryRow struct {
-	TotalAmount           int64
-	TotalPromptTokens     int64
-	TotalCompletionTokens int64
-	TotalCacheHitTokens   int64
-	TotalCacheMissTokens  int64
+	TotalAmount           int64 `json:"totalAmount"`
+	TotalPromptTokens     int64 `json:"totalPromptTokens"`
+	TotalCompletionTokens int64 `json:"totalCompletionTokens"`
+	TotalCacheHitTokens   int64 `json:"totalCacheHitTokens"`
+	TotalCacheMissTokens  int64 `json:"totalCacheMissTokens"`
 }
 
 // ==========================================
@@ -1392,14 +1392,14 @@ ORDER BY date ASC
 `
 
 type GetUserTrendSeriesParams struct {
-	UserID    pgtype.Int4
-	CreatedAt pgtype.Timestamptz
+	UserID    pgtype.Int4        `json:"userId"`
+	CreatedAt pgtype.Timestamptz `json:"createdAt"`
 }
 
 type GetUserTrendSeriesRow struct {
-	Date         pgtype.Date
-	RequestCount int64
-	DailyAmount  int64
+	Date         pgtype.Date `json:"date"`
+	RequestCount int64       `json:"requestCount"`
+	DailyAmount  int64       `json:"dailyAmount"`
 }
 
 func (q *Queries) GetUserTrendSeries(ctx context.Context, arg GetUserTrendSeriesParams) ([]GetUserTrendSeriesRow, error) {
@@ -1471,13 +1471,13 @@ LEFT JOIN active_keys ON active_keys.user_id = filtered_users.id
 `
 
 type GetUsersSummaryForAdminRow struct {
-	TotalUsers        int64
-	ActiveUsers       int64
-	TotalCashBalance  int64
-	TotalGrantBalance int64
-	TotalRequests     int64
-	TotalTokens       int64
-	TotalActiveKeys   int64
+	TotalUsers        int64 `json:"totalUsers"`
+	ActiveUsers       int64 `json:"activeUsers"`
+	TotalCashBalance  int64 `json:"totalCashBalance"`
+	TotalGrantBalance int64 `json:"totalGrantBalance"`
+	TotalRequests     int64 `json:"totalRequests"`
+	TotalTokens       int64 `json:"totalTokens"`
+	TotalActiveKeys   int64 `json:"totalActiveKeys"`
 }
 
 func (q *Queries) GetUsersSummaryForAdmin(ctx context.Context, keyword string) (GetUsersSummaryForAdminRow, error) {
@@ -1500,8 +1500,8 @@ UPDATE api_keys SET quota_used = quota_used + $2 WHERE id = $1
 `
 
 type IncrementAPIKeyQuotaUsedParams struct {
-	ID        int32
-	QuotaUsed pgtype.Int8
+	ID        int32       `json:"id"`
+	QuotaUsed pgtype.Int8 `json:"quotaUsed"`
 }
 
 func (q *Queries) IncrementAPIKeyQuotaUsed(ctx context.Context, arg IncrementAPIKeyQuotaUsedParams) error {
@@ -1713,9 +1713,9 @@ OFFSET $2
 `
 
 type ListBalanceLogsByUserParams struct {
-	UserID    int32
-	OffsetVal int32
-	LimitVal  int32
+	UserID    int32 `json:"userId"`
+	OffsetVal int32 `json:"offsetVal"`
+	LimitVal  int32 `json:"limitVal"`
 }
 
 func (q *Queries) ListBalanceLogsByUser(ctx context.Context, arg ListBalanceLogsByUserParams) ([]BalanceLog, error) {
@@ -1761,8 +1761,8 @@ OFFSET
 `
 
 type ListBillingLogsParams struct {
-	Limit  int32
-	Offset int32
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
 }
 
 func (q *Queries) ListBillingLogs(ctx context.Context, arg ListBillingLogsParams) ([]BillingLog, error) {
@@ -1822,9 +1822,9 @@ OFFSET $2
 `
 
 type ListChannelFailureLogsByChannelParams struct {
-	ChannelID int32
-	OffsetVal int32
-	LimitVal  int32
+	ChannelID int32 `json:"channelId"`
+	OffsetVal int32 `json:"offsetVal"`
+	LimitVal  int32 `json:"limitVal"`
 }
 
 func (q *Queries) ListChannelFailureLogsByChannel(ctx context.Context, arg ListChannelFailureLogsByChannelParams) ([]ChannelFailureLog, error) {
@@ -1910,26 +1910,26 @@ OFFSET $2
 `
 
 type ListUsersForAdminParams struct {
-	Keyword   string
-	OffsetVal int32
-	LimitVal  int32
+	Keyword   string `json:"keyword"`
+	OffsetVal int32  `json:"offsetVal"`
+	LimitVal  int32  `json:"limitVal"`
 }
 
 type ListUsersForAdminRow struct {
-	ID                    int32
-	Email                 string
-	Nickname              string
-	CashBalance           pgtype.Int8
-	GrantBalance          pgtype.Int8
-	Status                pgtype.Int4
-	CreatedAt             pgtype.Timestamptz
-	LastLoginAt           pgtype.Timestamptz
-	TotalRequests         int64
-	TotalPromptTokens     int64
-	TotalCompletionTokens int64
-	TotalAmountCents      int64
-	LastRequestAt         interface{}
-	ActiveKeyCount        int64
+	ID                    int32              `json:"id"`
+	Email                 string             `json:"email"`
+	Nickname              string             `json:"nickname"`
+	CashBalance           pgtype.Int8        `json:"cashBalance"`
+	GrantBalance          pgtype.Int8        `json:"grantBalance"`
+	Status                pgtype.Int4        `json:"status"`
+	CreatedAt             pgtype.Timestamptz `json:"createdAt"`
+	LastLoginAt           pgtype.Timestamptz `json:"lastLoginAt"`
+	TotalRequests         int64              `json:"totalRequests"`
+	TotalPromptTokens     int64              `json:"totalPromptTokens"`
+	TotalCompletionTokens int64              `json:"totalCompletionTokens"`
+	TotalAmountCents      int64              `json:"totalAmountCents"`
+	LastRequestAt         interface{}        `json:"lastRequestAt"`
+	ActiveKeyCount        int64              `json:"activeKeyCount"`
 }
 
 func (q *Queries) ListUsersForAdmin(ctx context.Context, arg ListUsersForAdminParams) ([]ListUsersForAdminRow, error) {
@@ -1989,12 +1989,12 @@ WHERE
 `
 
 type MarkAsyncTaskStatusParams struct {
-	ID              string
-	Status          string
-	OutputPayload   []byte
-	ErrorPayload    []byte
-	Metadata        []byte
-	ActualCostCents int64
+	ID              string `json:"id"`
+	Status          string `json:"status"`
+	OutputPayload   []byte `json:"outputPayload"`
+	ErrorPayload    []byte `json:"errorPayload"`
+	Metadata        []byte `json:"metadata"`
+	ActualCostCents int64  `json:"actualCostCents"`
 }
 
 func (q *Queries) MarkAsyncTaskStatus(ctx context.Context, arg MarkAsyncTaskStatusParams) (AsyncTask, error) {
@@ -2051,13 +2051,13 @@ WHERE
 `
 
 type MarkAsyncTaskSubmittedParams struct {
-	ID             string
-	ChannelID      pgtype.Int4
-	Provider       string
-	Status         string
-	UpstreamTaskID pgtype.Text
-	OutputPayload  []byte
-	Metadata       []byte
+	ID             string      `json:"id"`
+	ChannelID      pgtype.Int4 `json:"channelId"`
+	Provider       string      `json:"provider"`
+	Status         string      `json:"status"`
+	UpstreamTaskID pgtype.Text `json:"upstreamTaskId"`
+	OutputPayload  []byte      `json:"outputPayload"`
+	Metadata       []byte      `json:"metadata"`
 }
 
 func (q *Queries) MarkAsyncTaskSubmitted(ctx context.Context, arg MarkAsyncTaskSubmittedParams) (AsyncTask, error) {
@@ -2104,9 +2104,9 @@ UPDATE api_keys SET key_string = $1 WHERE id = $2 AND user_id = $3
 `
 
 type RotateAPIKeyParams struct {
-	KeyString string
-	ID        int32
-	UserID    pgtype.Int4
+	KeyString string      `json:"keyString"`
+	ID        int32       `json:"id"`
+	UserID    pgtype.Int4 `json:"userId"`
 }
 
 func (q *Queries) RotateAPIKey(ctx context.Context, arg RotateAPIKeyParams) error {
@@ -2125,10 +2125,10 @@ WHERE
 `
 
 type SetSubscriptionFieldsParams struct {
-	ID           int32
-	GrantBalance pgtype.Int8
-	SubExpiresAt pgtype.Timestamptz
-	TierLevel    pgtype.Int4
+	ID           int32              `json:"id"`
+	GrantBalance pgtype.Int8        `json:"grantBalance"`
+	SubExpiresAt pgtype.Timestamptz `json:"subExpiresAt"`
+	TierLevel    pgtype.Int4        `json:"tierLevel"`
 }
 
 func (q *Queries) SetSubscriptionFields(ctx context.Context, arg SetSubscriptionFieldsParams) error {
@@ -2146,9 +2146,9 @@ UPDATE api_keys SET name = $1 WHERE id = $2 AND user_id = $3
 `
 
 type UpdateAPIKeyNameParams struct {
-	Name   string
-	ID     int32
-	UserID pgtype.Int4
+	Name   string      `json:"name"`
+	ID     int32       `json:"id"`
+	UserID pgtype.Int4 `json:"userId"`
 }
 
 func (q *Queries) UpdateAPIKeyName(ctx context.Context, arg UpdateAPIKeyNameParams) error {
@@ -2161,9 +2161,9 @@ UPDATE api_keys SET status = $1 WHERE id = $2 AND user_id = $3
 `
 
 type UpdateAPIKeyStatusParams struct {
-	Status pgtype.Int4
-	ID     int32
-	UserID pgtype.Int4
+	Status pgtype.Int4 `json:"status"`
+	ID     int32       `json:"id"`
+	UserID pgtype.Int4 `json:"userId"`
 }
 
 func (q *Queries) UpdateAPIKeyStatus(ctx context.Context, arg UpdateAPIKeyStatusParams) error {
@@ -2190,18 +2190,18 @@ WHERE
 `
 
 type UpdateChannelParams struct {
-	ID            int32
-	Name          string
-	Provider      string
-	BaseUrl       string
-	ApiKey        string
-	Weight        pgtype.Int4
-	Models        string
-	ProtocolType  string
-	UploadMode    string
-	ModelMapping  []byte
-	SupportsAsync bool
-	Status        pgtype.Int4
+	ID            int32       `json:"id"`
+	Name          string      `json:"name"`
+	Provider      string      `json:"provider"`
+	BaseUrl       string      `json:"baseUrl"`
+	ApiKey        string      `json:"apiKey"`
+	Weight        pgtype.Int4 `json:"weight"`
+	Models        string      `json:"models"`
+	ProtocolType  string      `json:"protocolType"`
+	UploadMode    string      `json:"uploadMode"`
+	ModelMapping  []byte      `json:"modelMapping"`
+	SupportsAsync bool        `json:"supportsAsync"`
+	Status        pgtype.Int4 `json:"status"`
 }
 
 func (q *Queries) UpdateChannel(ctx context.Context, arg UpdateChannelParams) (Channel, error) {
@@ -2242,8 +2242,8 @@ UPDATE channels SET status = $2 WHERE id = $1
 `
 
 type UpdateChannelStatusParams struct {
-	ID     int32
-	Status pgtype.Int4
+	ID     int32       `json:"id"`
+	Status pgtype.Int4 `json:"status"`
 }
 
 func (q *Queries) UpdateChannelStatus(ctx context.Context, arg UpdateChannelStatusParams) error {
@@ -2283,18 +2283,18 @@ WHERE
 `
 
 type UpdateModelParams struct {
-	ModelName           string
-	InputPriceCents     int64
-	OutputPriceCents    int64
-	CacheHitPriceCents  int64
-	CacheMissPriceCents int64
-	Multiplier          float32
-	BillingPolicy       string
-	Modality            string
-	PricingMode         string
-	PricingConfig       []byte
-	MaxConcurrency      int32
-	Status              pgtype.Int4
+	ModelName           string      `json:"modelName"`
+	InputPriceCents     int64       `json:"inputPriceCents"`
+	OutputPriceCents    int64       `json:"outputPriceCents"`
+	CacheHitPriceCents  int64       `json:"cacheHitPriceCents"`
+	CacheMissPriceCents int64       `json:"cacheMissPriceCents"`
+	Multiplier          float32     `json:"multiplier"`
+	BillingPolicy       string      `json:"billingPolicy"`
+	Modality            string      `json:"modality"`
+	PricingMode         string      `json:"pricingMode"`
+	PricingConfig       []byte      `json:"pricingConfig"`
+	MaxConcurrency      int32       `json:"maxConcurrency"`
+	Status              pgtype.Int4 `json:"status"`
 }
 
 func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (Model, error) {
@@ -2334,18 +2334,14 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (Model
 const updateUserGrantBalance = `-- name: UpdateUserGrantBalance :exec
 UPDATE users
 SET
-    grant_balance = grant_balance + $2,
-    sub_expires_at = CASE
-        WHEN sub_expires_at IS NULL AND $2 > 0 THEN NOW() + INTERVAL '30 days'
-        ELSE sub_expires_at
-    END
+    grant_balance = grant_balance + $2
 WHERE
     id = $1
 `
 
 type UpdateUserGrantBalanceParams struct {
-	ID           int32
-	GrantBalance pgtype.Int8
+	ID           int32       `json:"id"`
+	GrantBalance pgtype.Int8 `json:"grantBalance"`
 }
 
 func (q *Queries) UpdateUserGrantBalance(ctx context.Context, arg UpdateUserGrantBalanceParams) error {
@@ -2362,8 +2358,8 @@ WHERE
 `
 
 type UpdateUserTopupBalanceParams struct {
-	ID          int32
-	CashBalance pgtype.Int8
+	ID          int32       `json:"id"`
+	CashBalance pgtype.Int8 `json:"cashBalance"`
 }
 
 func (q *Queries) UpdateUserTopupBalance(ctx context.Context, arg UpdateUserTopupBalanceParams) error {

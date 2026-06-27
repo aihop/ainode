@@ -2,19 +2,6 @@ package db
 
 import "context"
 
-// 说明：本文件为手写的 sqlc 风格查询，对应 settlement_outbox 表。
-// 之所以未放进由 sqlc 生成的 query.sql.go，是为了避免在没有 sqlc 工具链时
-// 整体重生成。若后续切换到 sqlc 生成，请把以下 SQL 迁移到 query.sql 并删除本文件，
-// 以免出现重复的方法定义。
-
-// SettlementOutbox 对应 settlement_outbox 表中待处理的一行。
-type SettlementOutbox struct {
-	ID        int64
-	RequestID string
-	Payload   []byte
-	Attempts  int32
-}
-
 const insertSettlementOutbox = `-- name: InsertSettlementOutbox :exec
 INSERT INTO settlement_outbox (request_id, payload)
 VALUES ($1, $2)
