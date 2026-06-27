@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"aihop.io/ainode/internal/api/httpx"
 	"aihop.io/ainode/internal/channel"
 	"aihop.io/ainode/internal/db"
 	"github.com/go-chi/chi/v5"
@@ -90,9 +91,7 @@ func (h *AdminHandler) ListChannelHealth(w http.ResponseWriter, r *http.Request)
 		})
 	}
 
-	jsonResponse(w, http.StatusOK, map[string]any{
-		"data": items,
-	})
+	jsonResponse(w, http.StatusOK, items)
 }
 
 // ResetChannelCircuitBreaker 手动重置渠道断路器。
@@ -178,10 +177,5 @@ func (h *AdminHandler) ListChannelFailureLogs(w http.ResponseWriter, r *http.Req
 		})
 	}
 
-	jsonResponse(w, http.StatusOK, map[string]any{
-		"total":     total,
-		"page":      page,
-		"page_size": pageSize,
-		"data":      logs,
-	})
+	httpx.Page(w, logs, page, pageSize, int64(total))
 }

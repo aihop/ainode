@@ -487,6 +487,17 @@ Auth 必须在 RateLimit 之前，因为限流需要 `user_id`（从 Auth 中间
 }
 ```
 
+### 8.7 命名规范（统一,勿混用）
+
+- **三个资金池**统一命名为 `sub`(订阅实付) / `grant`(订阅赠送) / `cash`(充值),消费顺序 sub → grant → cash:
+  - DB 列:`sub_balance` / `grant_balance` / `cash_balance`;异步任务预扣记 `sub_deducted`。
+  - Redis key:`sub_balance:<uid>` / `grant_balance:<uid>` / `cash_balance:<uid>`(用 `billing.SubBalanceKey/GrantBalanceKey/CashBalanceKey`,勿手拼)。
+  - Go:`billing.Deduction{Sub,Grant,Cash}`、`SettlementRequest.SubDeducted`、`reqctx.KeySubDeducted`。
+  - **禁止再出现 `sub_paid` 旧名**。
+- **订阅到期时间**统一用 `sub_expires_at`(已废弃 `grant_expires_at`)。
+- **所有对外 HTTP API 的 JSON 字段一律 camelCase**(`userId`/`eventId`/`balanceType`/`sourceId`/`amountCents`…),禁止 snake_case。这适用于 admin / site / webhook 全部接口与事件(含 `order.paid` 的 `integration.transaction`、`subscription.apply`/`subscription.cancel`)。
+- **金额**对外字段:高精度浮点(`centsToMoneyPrecise`)+ 原始整数 `xxxCents` 并存,累加/对账用整数。
+
 ---
 
 ## 9. AI 自我进化与协作协议 (Self-Audit)

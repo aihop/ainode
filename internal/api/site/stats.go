@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"aihop.io/ainode/internal/api/httpx"
 	"aihop.io/ainode/internal/db"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -30,7 +31,7 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 }
 
 func respondError(w http.ResponseWriter, status int, message string) {
-	respondJSON(w, status, map[string]string{"error": message})
+	httpx.Err(w, status, status, message)
 }
 
 // 金额转换助手 (将 10^8 的 BIGINT 转为正常的浮点数，如 100.00)

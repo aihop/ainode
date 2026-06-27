@@ -22,7 +22,7 @@ func (h *InternalHandler) BalanceLogsListHandler(w http.ResponseWriter, r *http.
 
 	// 2. 解析分页参数
 	pageStr := r.URL.Query().Get("page")
-	limitStr := r.URL.Query().Get("limit")
+	limitStr := r.URL.Query().Get("pageSize")
 
 	page := 1
 	if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
@@ -91,10 +91,10 @@ func (h *InternalHandler) BalanceLogsListHandler(w http.ResponseWriter, r *http.
 	}
 
 	response := map[string]interface{}{
-		"list":  resLogs,
-		"total": total,
-		"page":  page,
-		"limit": limit,
+		"list":     resLogs,
+		"total":    total,
+		"page":     page,
+		"pageSize": limit,
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{

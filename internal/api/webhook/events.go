@@ -49,10 +49,10 @@ type orderIntegration struct {
 type orderIntegrationTransaction struct {
 	Enabled     *bool           `json:"enabled"`
 	Type        string          `json:"type"`
-	BalanceType string          `json:"balance_type"`
+	BalanceType string          `json:"balanceType"`
 	Direction   string          `json:"direction"`
 	Amount      float64         `json:"amount"`
-	SourceID    string          `json:"source_id"`
+	SourceID    string          `json:"sourceId"`
 	Remark      string          `json:"remark"`
 	Metadata    json.RawMessage `json:"metadata"`
 }

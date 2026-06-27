@@ -160,16 +160,16 @@ type Transaction struct {
 }
 
 type User struct {
-	ID             int32
-	Email          string
-	PasswordHash   string
-	Nickname       pgtype.Text
-	AvatarUrl      pgtype.Text
-	CashBalance    pgtype.Int8
-	GrantBalance   pgtype.Int8
-	TierLevel      pgtype.Int4
+	ID           int32
+	Email        string
+	PasswordHash string
+	Nickname     pgtype.Text
+	AvatarUrl    pgtype.Text
+	CashBalance  pgtype.Int8
+	GrantBalance pgtype.Int8
+	TierLevel    pgtype.Int4
 	SubExpiresAt pgtype.Timestamptz
-	Status         pgtype.Int4
-	LastLoginAt    pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
+	Status       pgtype.Int4
+	LastLoginAt  pgtype.Timestamptz
+	CreatedAt    pgtype.Timestamptz
 }

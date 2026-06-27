@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"aihop.io/ainode/internal/api/httpx"
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/db"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -37,14 +38,15 @@ func rawJSONOrDefault(raw json.RawMessage) []byte {
 	return raw
 }
 
+// jsonResponse 输出统一成功信封 {code:0,msg:"success",data}(见 docs/ai/api-conventions.md)。
 func jsonResponse(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "msg": "success", "data": data})
 }
 
 func errorResponse(w http.ResponseWriter, status int, message string) {
-	jsonResponse(w, status, map[string]string{"error": message})
+	httpx.Err(w, status, status, message)
 }
 
 func centsToMoney(amount int64) float64 {

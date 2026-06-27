@@ -47,7 +47,7 @@ func (h *InternalHandler) BillingLogsListHandler(w http.ResponseWriter, r *http.
 	}
 
 	pageStr := r.URL.Query().Get("page")
-	limitStr := r.URL.Query().Get("limit")
+	limitStr := r.URL.Query().Get("pageSize")
 
 	page := 1
 	if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
@@ -124,10 +124,10 @@ func (h *InternalHandler) BillingLogsListHandler(w http.ResponseWriter, r *http.
 	}
 
 	response := map[string]interface{}{
-		"list":  resLogs,
-		"total": totalCount,
-		"page":  page,
-		"limit": limit,
+		"list":     resLogs,
+		"total":    totalCount,
+		"page":     page,
+		"pageSize": limit,
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{

@@ -42,7 +42,7 @@ func (h *InternalHandler) ModelFailureLogsListHandler(w http.ResponseWriter, r *
 	}
 
 	pageStr := r.URL.Query().Get("page")
-	limitStr := r.URL.Query().Get("limit")
+	limitStr := r.URL.Query().Get("pageSize")
 
 	page := 1
 	if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
@@ -128,10 +128,10 @@ func (h *InternalHandler) ModelFailureLogsListHandler(w http.ResponseWriter, r *
 	}
 
 	response := map[string]any{
-		"list":  resLogs,
-		"total": totalCount,
-		"page":  page,
-		"limit": limit,
+		"list":     resLogs,
+		"total":    totalCount,
+		"page":     page,
+		"pageSize": limit,
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{

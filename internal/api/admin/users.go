@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"aihop.io/ainode/internal/api/httpx"
 	"aihop.io/ainode/internal/billing"
 	"aihop.io/ainode/internal/db"
 	"github.com/go-chi/chi/v5"
@@ -79,7 +80,7 @@ func parsePagination(r *http.Request, defaultPageSize int) (int, int, int) {
 		}
 	}
 
-	if raw := r.URL.Query().Get("page_size"); raw != "" {
+	if raw := r.URL.Query().Get("pageSize"); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 100 {
 			pageSize = parsed
 		}
@@ -144,12 +145,7 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	jsonResponse(w, http.StatusOK, map[string]any{
-		"total":     total,
-		"page":      page,
-		"page_size": pageSize,
-		"data":      items,
-	})
+	httpx.Page(w, items, page, pageSize, total)
 }
 
 // UsersSummary 返回管理员用户全局汇总（与列表拆开，避免列表翻页时重复跑全表聚合；
@@ -231,12 +227,7 @@ func (h *AdminHandler) ListUserBalanceLogs(w http.ResponseWriter, r *http.Reques
 		})
 	}
 
-	jsonResponse(w, http.StatusOK, map[string]any{
-		"total":     total,
-		"page":      page,
-		"page_size": pageSize,
-		"data":      logs,
-	})
+	httpx.Page(w, logs, page, pageSize, total)
 }
 
 // AdjustUserBalance lets admins directly recharge cash balance or grant balance with an auditable log.

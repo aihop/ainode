@@ -32,13 +32,13 @@ func NewHandler(queries *db.Queries, pool *pgxpool.Pool) *Handler {
 type transactionWebhookRequest struct {
 	Source      string          `json:"source"`
 	Event       string          `json:"event"`
-	EventID     string          `json:"event_id"`
-	UserID      int32           `json:"user_id"`
+	EventID     string          `json:"eventId"`
+	UserID      int32           `json:"userId"`
 	Type        string          `json:"type"`
-	BalanceType string          `json:"balance_type"`
+	BalanceType string          `json:"balanceType"`
 	Direction   string          `json:"direction"`
 	Amount      float64         `json:"amount"`
-	SourceID    string          `json:"source_id"`
+	SourceID    string          `json:"sourceId"`
 	Remark      string          `json:"remark"`
 	Metadata    json.RawMessage `json:"metadata"`
 }

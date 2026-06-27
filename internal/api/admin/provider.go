@@ -60,9 +60,7 @@ func loadProviderCatalog() map[string]providerCatalogItem {
 }
 
 func (h *AdminHandler) ListProviders(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, http.StatusOK, map[string]any{
-		"data": applyProviderCatalogOverrides(provider.ListProviderMetas()),
-	})
+	jsonResponse(w, http.StatusOK, applyProviderCatalogOverrides(provider.ListProviderMetas()))
 }
 
 func applyProviderCatalogOverrides(metas []provider.ProviderMeta) []provider.ProviderMeta {
