@@ -22,6 +22,8 @@
 > `2026-06-26`: 激活 `api_keys.quota_limit / quota_used` Key 级硬配额：鉴权中间件在预扣费前检查 `quota_used + 预估费 > quota_limit`，结算 Worker 在写账单后递增 `quota_used`；配额单位与金额同纬（cents），0 表示不限制，见 Section 3 与 Section 4.1。
 > `2026-06-26`: 管理员 API 鉴权从硬编码 `"admin-secret-key"` 改为读取 `internal.token` 配置，见 Section 6。
 > `2026-06-27`: 新增时间与时区规范（Section 8.8）。所有 API 出口点的时间格式化必须 `.UTC()` 后输出 RFC3339；修复 stats.go trend label 遗漏 `.UTC()` 的一致性问题。
+> `2026-06-27`: RPM/TPM 限流升级为按订阅等级差异化（`config.tier_limits`）+ 新增用户+模型级 ModelRPM 限制（防单用户打满某模型配额）。废弃全局固定阈值模式。`reqctx` 新增 `KeyTierLevel`，auth 中间件将 `user_tier` 注入 context，限流中间件读取 tier 后通过 `config.Server.ResolveTierLimit` 获取对应限流参数。tier 未配置的字段自动回落至全局默认，完全向后兼容。见 Section 4.5 与 Section 8.4。
+> `2026-06-27`: 新增可配置的请求审计日志（`request_log.enabled`，默认关闭）。新增 `request_logs` 表（`request_id` 唯一幂等）、`internal/billing/request_log.go`（入队）、`internal/worker/request_log.go`（落库）。auth 中间件存原始 body 到 context，`ModifyResponse` 的结算点（成功 / 失败 / 代理错误路径）统一经 Asynq 异步写入，热路径只入队不写库。见 Section 3、Section 4.1 与 Section 7。
 
 ## 1. 项目定位与核心架构
 
@@ -167,6 +169,7 @@ AI 请严格按照以下结构组织代码：
 | `transactions` | 统一资金总账 | `user_id`, `event_id`, `type`, `balance_type`, `direction`, `amount_cents`, `before_balance_cents`, `after_balance_cents`, `source_type`, `source_id` |
 | `balance_logs` | 余额变更流水 | `user_id`, `balance_type`, `action_type`, `amount_cents`, `before_balance_cents`, `after_balance_cents`, `operator_name`, `remark` |
 | `settlement_outbox` | 结算投递兜底（asynq 投递失败时落库，由 relay 重投） | `request_id`(唯一), `payload`(jsonb), `attempts`, `processed_at` |
+| `request_logs` | 请求审计日志（由 `request_log.enabled` 控制） | `request_id`(唯一), `user_id`, `provider`, `public_model_name`, `input_payload`, `prompt_tokens`, `completion_tokens`, `amount_cents`, `is_success`, `created_at` |
 
 ### 双余额体系设计
 
@@ -280,9 +283,12 @@ local billing_policy = ARGV[2] or "both"
 在 `internal/middleware/` 中基于 Redis 实现：
 
 1. **RPM/TPM 限流**: 滑动窗口，限制单用户每分钟请求数和 Token 数。触发限流时自动退款预扣。
-   - ⚠️ 当前实现为**全局固定阈值**（`cmd/api/main.go` 挂载时写死 RPM=60 / TPM=100000），尚未按用户/Key 维度差异化。
+   - 支持 **按订阅等级（tier_level）差异化**：通过 `config.tier_limits` 配置各 tier 的 RPM/TPM/ModelRPM，
+     未配置的 tier 回落到全局 `rpm_limit`/`tpm_limit`，见 [config.go](internal/config/config.go) 的 `ResolveTierLimit`。
+   - 已废弃旧的全局固定阈值模式。
 2. **模型级并发限制**: 根据 `models.max_concurrency` 在 Redis 中做模型并发占位，超限时直接拒绝并退款预扣。
-3. **优先级路由（规划中，未实现）**: 计划根据 `api_keys.tier_level` 在高并发时优先保证订阅用户请求；当前所有用户共用同一套限流阈值，tier 尚未参与限流/调度。
+3. **用户+模型级 RPM 限制**: 通过 `tier_limits.<tier>.model_rpm` 配置，防止单用户打满某模型配额。
+4. **优先级路由（规划中，未实现）**: 计划根据 `api_keys.tier_level` 在高并发时优先保证订阅用户请求。
 
 ### 4.6 多模态网关演进约定
 

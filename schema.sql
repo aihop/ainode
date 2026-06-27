@@ -187,6 +187,30 @@ CREATE TABLE IF NOT EXISTS balance_logs (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
+-- 计费路由请求审计日志（由 request_log.enabled 控制开关，异步写库）
+CREATE TABLE IF NOT EXISTS request_logs (
+    id BIGSERIAL PRIMARY KEY,
+    request_id VARCHAR(100) NOT NULL UNIQUE,
+    user_id INT NOT NULL REFERENCES users (id),
+    api_key_id INT REFERENCES api_keys (id),
+    channel_id INT REFERENCES channels (id),
+    provider VARCHAR(32) NOT NULL DEFAULT '',
+    request_type VARCHAR(32) NOT NULL DEFAULT '', -- chat | image_generation | video_generation
+    public_model_name VARCHAR(100) NOT NULL DEFAULT '',
+    upstream_model_name VARCHAR(100) NOT NULL DEFAULT '',
+    input_payload JSONB,
+    prompt_tokens INT NOT NULL DEFAULT 0,
+    completion_tokens INT NOT NULL DEFAULT 0,
+    cache_hit_tokens INT NOT NULL DEFAULT 0,
+    cache_miss_tokens INT NOT NULL DEFAULT 0,
+    amount_cents BIGINT NOT NULL DEFAULT 0,
+    pre_deducted_cents BIGINT NOT NULL DEFAULT 0,
+    status_code INT NOT NULL DEFAULT 0,
+    is_stream BOOLEAN NOT NULL DEFAULT FALSE,
+    is_success BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
 -- 渠道失败日志（用于追查上游异常、限流与断路器熔断原因）
 CREATE TABLE IF NOT EXISTS channel_failure_logs (
     id BIGSERIAL PRIMARY KEY,

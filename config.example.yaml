@@ -4,6 +4,18 @@ server:
   # TPM 按 "prompt + max_tokens 预留" 计，agent 类高频/大上下文场景可继续调高。
   rpm_limit: 600
   tpm_limit: 2000000
+  # 按订阅等级(tier_level)差异化限流（可选）。
+  # 各字段留空/0 表示回落到全局 rpm_limit / tpm_limit（model_rpm 回落到不限制）。
+  tier_limits:
+    "0":   # Free 用户
+      rpm: 30
+      tpm: 500000
+      model_rpm: 10   # 单用户单模型 10 RPM
+    "1":   # Pro 用户
+      rpm: 300
+      tpm: 5000000
+      model_rpm: 60
+    "2":   # Enterprise 用户（未配置，将使用全局默认值）
 
 db:
   dsn: ""
@@ -19,3 +31,7 @@ redis:
 
 internal:
   token: ""
+
+# 请求审计日志（默认关闭；开启后每次计费路由请求会异步记录原始输入与结算详情到 request_logs 表）
+request_log:
+  enabled: false

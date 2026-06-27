@@ -695,6 +695,77 @@ func (q *Queries) CreateModelFailureLog(ctx context.Context, arg CreateModelFail
 	return err
 }
 
+const createRequestLog = `-- name: CreateRequestLog :exec
+INSERT INTO request_logs (
+    request_id,
+    user_id,
+    api_key_id,
+    channel_id,
+    provider,
+    request_type,
+    public_model_name,
+    upstream_model_name,
+    input_payload,
+    prompt_tokens,
+    completion_tokens,
+    cache_hit_tokens,
+    cache_miss_tokens,
+    amount_cents,
+    pre_deducted_cents,
+    status_code,
+    is_stream,
+    is_success
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9,
+    $10, $11, $12, $13, $14, $15, $16, $17, $18
+)
+`
+
+type CreateRequestLogParams struct {
+	RequestID         string      `json:"requestId"`
+	UserID            int32       `json:"userId"`
+	ApiKeyID          pgtype.Int4 `json:"apiKeyId"`
+	ChannelID         pgtype.Int4 `json:"channelId"`
+	Provider          string      `json:"provider"`
+	RequestType       string      `json:"requestType"`
+	PublicModelName   string      `json:"publicModelName"`
+	UpstreamModelName string      `json:"upstreamModelName"`
+	InputPayload      []byte      `json:"inputPayload"`
+	PromptTokens      int32       `json:"promptTokens"`
+	CompletionTokens  int32       `json:"completionTokens"`
+	CacheHitTokens    int32       `json:"cacheHitTokens"`
+	CacheMissTokens   int32       `json:"cacheMissTokens"`
+	AmountCents       int64       `json:"amountCents"`
+	PreDeductedCents  int64       `json:"preDeductedCents"`
+	StatusCode        int32       `json:"statusCode"`
+	IsStream          bool        `json:"isStream"`
+	IsSuccess         bool        `json:"isSuccess"`
+}
+
+func (q *Queries) CreateRequestLog(ctx context.Context, arg CreateRequestLogParams) error {
+	_, err := q.db.Exec(ctx, createRequestLog,
+		arg.RequestID,
+		arg.UserID,
+		arg.ApiKeyID,
+		arg.ChannelID,
+		arg.Provider,
+		arg.RequestType,
+		arg.PublicModelName,
+		arg.UpstreamModelName,
+		arg.InputPayload,
+		arg.PromptTokens,
+		arg.CompletionTokens,
+		arg.CacheHitTokens,
+		arg.CacheMissTokens,
+		arg.AmountCents,
+		arg.PreDeductedCents,
+		arg.StatusCode,
+		arg.IsStream,
+		arg.IsSuccess,
+	)
+	return err
+}
+
 const createTransaction = `-- name: CreateTransaction :one
 INSERT INTO transactions (
     user_id,

@@ -350,6 +350,31 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			}
 			// 监控埋点：记录失败请求
 			metrics.GatewayRequestTotal.WithLabelValues(publicModelName, strconv.Itoa(int(channelID)), strconv.Itoa(resp.StatusCode)).Inc()
+
+			// 请求审计日志：失败路径也异步记录
+			if config.AppConfig.RequestLog.Enabled {
+				inputPayload, _ := ctx.Value(reqctx.KeyInputPayload).([]byte)
+				providerName, _ := ctx.Value(reqctx.KeyCurrentProvider).(string)
+				upstreamModelName, _ := ctx.Value(reqctx.KeyUpstreamModelName).(string)
+				rctx, rcancel := newBillingWriteCtx()
+				billing.EnqueueRequestLog(rctx, billing.RequestLogRequest{
+					RequestID:         reqID,
+					UserID:            userID,
+					APIKeyID:          apiKeyID,
+					ChannelID:         channelID,
+					Provider:          providerName,
+					RequestType:       requestType,
+					PublicModelName:   publicModelName,
+					UpstreamModelName: upstreamModelName,
+					InputPayload:      inputPayload,
+					PromptTokens:      int32(promptTokens),
+					PreDeductedCents:  preDeductedCents,
+					StatusCode:        int32(resp.StatusCode),
+					IsSuccess:         false,
+				})
+				rcancel()
+			}
+
 			return nil
 		}
 
@@ -426,6 +451,34 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			// 触发异步结算
 			sctx, scancel := newBillingWriteCtx()
 			billing.Settle(sctx, queries, settleReq)
+
+			// 请求审计日志：异步记录本次请求详情（热路径只入队不写库）
+			if config.AppConfig.RequestLog.Enabled {
+				inputPayload, _ := ctx.Value(reqctx.KeyInputPayload).([]byte)
+				provider, _ := ctx.Value(reqctx.KeyCurrentProvider).(string)
+				upstreamModelName, _ := ctx.Value(reqctx.KeyUpstreamModelName).(string)
+				billing.EnqueueRequestLog(sctx, billing.RequestLogRequest{
+					RequestID:         reqID,
+					UserID:            userID,
+					APIKeyID:          apiKeyID,
+					ChannelID:         channelID,
+					Provider:          provider,
+					RequestType:       requestType,
+					PublicModelName:   publicModelName,
+					UpstreamModelName: upstreamModelName,
+					InputPayload:      inputPayload,
+					PromptTokens:      int32(pTokens),
+					CompletionTokens:  int32(cTokens),
+					CacheHitTokens:    int32(cacheHitTokens),
+					CacheMissTokens:   int32(cacheMissTokens),
+					AmountCents:       actualCost,
+					PreDeductedCents:  preDeductedCents,
+					StatusCode:        200,
+					IsStream:          isStream,
+					IsSuccess:         true,
+				})
+			}
+
 			scancel()
 		}
 
@@ -532,23 +585,29 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Printf("Proxy Error: %v", err)
 
-			// 在代理发生错误（比如重试所有渠道都失败）时，退还预扣费
+			// 在代理发生错误（比如重试所有渠道都失败）时，退还预扣费 / 异步记录审计日志
 			ctx := r.Context()
 			isBillingRoute, _ := ctx.Value(reqctx.KeyIsBillingRoute).(bool)
+			var (
+				reqID            string
+				userID           int32
+				preDeductedCents int64
+				modelName        string
+			)
 			if isBillingRoute {
-				userID, _ := ctx.Value(reqctx.KeyUserID).(int32)
-				preDeductedCents, _ := ctx.Value(reqctx.KeyPreDeductedCents).(int64)
+				userID, _ = ctx.Value(reqctx.KeyUserID).(int32)
+				preDeductedCents, _ = ctx.Value(reqctx.KeyPreDeductedCents).(int64)
 				subDeducted, _ := ctx.Value(reqctx.KeySubDeducted).(int64)
 				grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
 				cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
-				reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
+				reqID, _ = ctx.Value(reqctx.KeyRequestID).(string)
+				modelName, _ = ctx.Value(reqctx.KeyPublicModelName).(string)
+				if modelName == "" {
+					modelName, _ = ctx.Value(reqctx.KeyModelName).(string)
+				}
 				if preDeductedCents > 0 {
 					apiKeyID, _ := ctx.Value(reqctx.KeyAPIKeyID).(int32)
 					channelID, _ := ctx.Value(reqctx.KeyCurrentChannelID).(int32)
-					modelName, _ := ctx.Value(reqctx.KeyPublicModelName).(string)
-					if modelName == "" {
-						modelName, _ = ctx.Value(reqctx.KeyModelName).(string)
-					}
 					promptTokens, _ := ctx.Value(reqctx.KeyPromptTokens).(int)
 					ectx, ecancel := newBillingWriteCtx()
 					billing.Refund(ectx, queries, userID, preDeductedCents,
@@ -561,6 +620,32 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 							PromptTokens: int32(promptTokens),
 							RequestID:    reqID,
 						})
+					ecancel()
+				}
+
+				// 请求审计日志：代理错误（重试全部失败）也异步记录
+				if config.AppConfig.RequestLog.Enabled {
+					inputPayload, _ := ctx.Value(reqctx.KeyInputPayload).([]byte)
+					requestType, _ := ctx.Value(reqctx.KeyRequestType).(string)
+					apiKeyID, _ := ctx.Value(reqctx.KeyAPIKeyID).(int32)
+					channelID, _ := ctx.Value(reqctx.KeyCurrentChannelID).(int32)
+					promptTokens, _ := ctx.Value(reqctx.KeyPromptTokens).(int)
+					providerName, _ := ctx.Value(reqctx.KeyCurrentProvider).(string)
+					ectx, ecancel := newBillingWriteCtx()
+					billing.EnqueueRequestLog(ectx, billing.RequestLogRequest{
+						RequestID:        reqID,
+						UserID:           userID,
+						APIKeyID:         apiKeyID,
+						ChannelID:        channelID,
+						Provider:         providerName,
+						RequestType:      requestType,
+						PublicModelName:  modelName,
+						InputPayload:     inputPayload,
+						PromptTokens:     int32(promptTokens),
+						PreDeductedCents: preDeductedCents,
+						StatusCode:       0,
+						IsSuccess:        false,
+					})
 					ecancel()
 				}
 			}
@@ -579,7 +664,7 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				errMsg = fmt.Sprintf("Bad Gateway: %v", err)
 			}
 
-			modelName, _ := ctx.Value(reqctx.KeyPublicModelName).(string)
+			modelName, _ = ctx.Value(reqctx.KeyPublicModelName).(string)
 			if modelName == "" {
 				modelName, _ = ctx.Value(reqctx.KeyModelName).(string)
 			}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"aihop.io/ainode/internal/billing"
+	"aihop.io/ainode/internal/config"
 	"aihop.io/ainode/internal/db"
 	"aihop.io/ainode/internal/reqctx"
 	"aihop.io/ainode/internal/utils"
@@ -23,7 +24,8 @@ func init() {
 	rateLimitScript = redis.NewScript(rateLimitLuaScript)
 }
 
-// RateLimiter 检查 RPM (Requests Per Minute) 或 TPM (Tokens Per Minute)
+// checkRateLimit 检查某个滑动窗口是否超限。
+// key: Redis key；windowSeconds: 窗口大小（秒）；maxAllowed: 上限；increment: 本次增加值。
 func checkRateLimit(ctx context.Context, key string, windowSeconds int, maxAllowed int64, increment int64) (bool, error) {
 	keys := []string{key}
 	args := []interface{}{windowSeconds, maxAllowed, increment}
@@ -39,8 +41,12 @@ func checkRateLimit(ctx context.Context, key string, windowSeconds int, maxAllow
 	return true, nil
 }
 
-// RPMAndTPMMiddleware 创建一个 HTTP 中间件，用于校验用户的并发速率
-func RPMAndTPMMiddleware(queries *db.Queries, maxRPM int64, maxTPM int64) func(http.Handler) http.Handler {
+// RPMAndTPMMiddleware 创建 HTTP 中间件，按用户订阅等级 (tier_level) 差异化限流。
+// 限制维度（均为 60s 滚动窗口）：
+//   - 用户级 RPM：全局固定阈值或按 tier 差异化
+//   - 用户级 TPM：同 RPM
+//   - 用户+模型级 RPM：防止单用户打满某模型配额，按 tier 差异化
+func RPMAndTPMMiddleware(queries *db.Queries, cfg *config.Config) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -58,10 +64,16 @@ func RPMAndTPMMiddleware(queries *db.Queries, maxRPM int64, maxTPM int64) func(h
 				return
 			}
 
+			// 获取用户订阅等级（未注入则默认 0）
+			tierLevel, _ := ctx.Value(reqctx.KeyTierLevel).(int32)
+			tierLimit := cfg.Server.ResolveTierLimit(tierLevel)
+
 			estimatedTokens, ok := ctx.Value(reqctx.KeyEstimatedTokens).(int64)
 			if !ok || estimatedTokens <= 0 {
 				estimatedTokens = 1
 			}
+
+			modelName, _ := ctx.Value(reqctx.KeyModelName).(string)
 
 			// 退款助手函数
 			refundPreDeduction := func() {
@@ -72,10 +84,6 @@ func RPMAndTPMMiddleware(queries *db.Queries, maxRPM int64, maxTPM int64) func(h
 				reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
 				apiKeyID, _ := ctx.Value(reqctx.KeyAPIKeyID).(int32)
 				channelID, _ := ctx.Value(reqctx.KeyCurrentChannelID).(int32)
-				modelName, _ := ctx.Value(reqctx.KeyPublicModelName).(string)
-				if modelName == "" {
-					modelName, _ = ctx.Value(reqctx.KeyModelName).(string)
-				}
 				promptTokens, _ := ctx.Value(reqctx.KeyPromptTokens).(int)
 				if preDeducted > 0 {
 					billing.Refund(context.Background(), queries, userID, preDeducted,
@@ -91,12 +99,12 @@ func RPMAndTPMMiddleware(queries *db.Queries, maxRPM int64, maxTPM int64) func(h
 				}
 			}
 
-			// 1. 检查 RPM
+			// ==========================================
+			// 1. 检查用户级 RPM
+			// ==========================================
 			rpmKey := fmt.Sprintf("rate:rpm:%d", userID)
-			rpmAllowed, err := checkRateLimit(ctx, rpmKey, 60, maxRPM, 1)
+			rpmAllowed, err := checkRateLimit(ctx, rpmKey, 60, tierLimit.RPM, 1)
 			if err != nil {
-				// Redis 临时不可用时 fail-open：限流是保护措施而非安全边界，
-				// 阻断所有合法请求比放宽限流危害更大。
 				log.Printf("WARN: RPM rate limit check failed (Redis error): %v, allowing request", err)
 			} else if !rpmAllowed {
 				refundPreDeduction()
@@ -104,9 +112,11 @@ func RPMAndTPMMiddleware(queries *db.Queries, maxRPM int64, maxTPM int64) func(h
 				return
 			}
 
-			// 2. 检查 TPM
+			// ==========================================
+			// 2. 检查用户级 TPM
+			// ==========================================
 			tpmKey := fmt.Sprintf("rate:tpm:%d", userID)
-			tpmAllowed, err := checkRateLimit(ctx, tpmKey, 60, maxTPM, estimatedTokens)
+			tpmAllowed, err := checkRateLimit(ctx, tpmKey, 60, tierLimit.TPM, estimatedTokens)
 			if err != nil {
 				log.Printf("WARN: TPM rate limit check failed (Redis error): %v, allowing request", err)
 			} else if !tpmAllowed {
@@ -114,6 +124,24 @@ func RPMAndTPMMiddleware(queries *db.Queries, maxRPM int64, maxTPM int64) func(h
 				utils.WriteOpenAIError(w, http.StatusTooManyRequests, "TPM limit exceeded", "rate_limit_error", "tpm_exceeded")
 				return
 			}
+
+			// ==========================================
+			// 3. 检查用户+模型级 RPM（如果 tier 配置了 model_rpm > 0）
+			// ==========================================
+			if tierLimit.ModelRPM > 0 && modelName != "" {
+				modelRPMKey := fmt.Sprintf("rate:model_rpm:%d:%s", userID, modelName)
+				modelRPMAllowed, err := checkRateLimit(ctx, modelRPMKey, 60, tierLimit.ModelRPM, 1)
+				if err != nil {
+					log.Printf("WARN: Model RPM rate limit check failed (Redis error): %v, allowing request", err)
+				} else if !modelRPMAllowed {
+					refundPreDeduction()
+					utils.WriteOpenAIError(w, http.StatusTooManyRequests,
+						fmt.Sprintf("Model %s RPM limit exceeded", modelName),
+						"rate_limit_error", "model_rpm_exceeded")
+					return
+				}
+			}
+
 			next.ServeHTTP(w, r)
 		})
 	}

@@ -144,6 +144,29 @@ type ModelFailureLog struct {
 	CreatedAt    pgtype.Timestamptz `json:"createdAt"`
 }
 
+type RequestLog struct {
+	ID                int64              `json:"id"`
+	RequestID         string             `json:"requestId"`
+	UserID            int32              `json:"userId"`
+	ApiKeyID          pgtype.Int4        `json:"apiKeyId"`
+	ChannelID         pgtype.Int4        `json:"channelId"`
+	Provider          string             `json:"provider"`
+	RequestType       string             `json:"requestType"`
+	PublicModelName   string             `json:"publicModelName"`
+	UpstreamModelName string             `json:"upstreamModelName"`
+	InputPayload      []byte             `json:"inputPayload"`
+	PromptTokens      int32              `json:"promptTokens"`
+	CompletionTokens  int32              `json:"completionTokens"`
+	CacheHitTokens    int32              `json:"cacheHitTokens"`
+	CacheMissTokens   int32              `json:"cacheMissTokens"`
+	AmountCents       int64              `json:"amountCents"`
+	PreDeductedCents  int64              `json:"preDeductedCents"`
+	StatusCode        int32              `json:"statusCode"`
+	IsStream          bool               `json:"isStream"`
+	IsSuccess         bool               `json:"isSuccess"`
+	CreatedAt         pgtype.Timestamptz `json:"createdAt"`
+}
+
 type SettlementOutbox struct {
 	ID          int64              `json:"id"`
 	RequestID   string             `json:"requestId"`

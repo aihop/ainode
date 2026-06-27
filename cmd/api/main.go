@@ -144,6 +144,8 @@ func main() {
 	mux := asynq.NewServeMux()
 	billingProcessor := worker.NewBillingTaskProcessor(queries, pool)
 	mux.HandleFunc(billing.TaskRecordBillingLog, billingProcessor.HandleRecordBillingLog)
+	requestLogProcessor := worker.NewRequestLogProcessor(queries)
+	mux.HandleFunc(billing.TaskRecordRequestLog, requestLogProcessor.HandleRecordRequestLog)
 
 	go func() {
 		log.Println("🚀 Asynq Worker is starting...")
@@ -258,7 +260,7 @@ func main() {
 		// ==========================
 		r.Group(func(asyncRouter chi.Router) {
 			asyncRouter.Use(middleware.AuthAndPreDeductMiddleware(queries))
-			asyncRouter.Use(middleware.RPMAndTPMMiddleware(queries, rpmLimit, tpmLimit))
+			asyncRouter.Use(middleware.RPMAndTPMMiddleware(queries, cfg))
 			asyncRouter.Use(middleware.ModelConcurrencyMiddleware(queries))
 
 			gatewayHandler := gateway.NewGatewayHandler(queries)
@@ -275,7 +277,7 @@ func main() {
 			proxyRouter.Use(middleware.AuthAndPreDeductMiddleware(queries))
 
 			// B. RPM 与 TPM 限流中间件 (例如: 每分钟 60 次请求，每分钟 100,000 Token)
-			proxyRouter.Use(middleware.RPMAndTPMMiddleware(queries, rpmLimit, tpmLimit))
+			proxyRouter.Use(middleware.RPMAndTPMMiddleware(queries, cfg))
 
 			// C. 模型级并发限制，按 models.max_concurrency 控制单模型的全局并发占位
 			proxyRouter.Use(middleware.ModelConcurrencyMiddleware(queries))

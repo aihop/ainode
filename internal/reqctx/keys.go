@@ -27,4 +27,6 @@ const (
 	KeyRequestID         Key = "request_id"
 	KeyCurrentChannelID  Key = "current_channel_id"
 	KeyCurrentProvider   Key = "current_provider"
+	KeyInputPayload      Key = "input_payload" // 原始请求 body bytes，用于请求审计日志
+	KeyTierLevel         Key = "tier_level"
 )

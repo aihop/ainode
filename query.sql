@@ -774,5 +774,30 @@ UPDATE api_keys SET name = $1 WHERE id = $2 AND user_id = $3;
 -- name: RotateAPIKey :exec
 UPDATE api_keys SET key_string = $1 WHERE id = $2 AND user_id = $3;
 
+-- name: CreateRequestLog :exec
+INSERT INTO request_logs (
+    request_id,
+    user_id,
+    api_key_id,
+    channel_id,
+    provider,
+    request_type,
+    public_model_name,
+    upstream_model_name,
+    input_payload,
+    prompt_tokens,
+    completion_tokens,
+    cache_hit_tokens,
+    cache_miss_tokens,
+    amount_cents,
+    pre_deducted_cents,
+    status_code,
+    is_stream,
+    is_success
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9,
+    $10, $11, $12, $13, $14, $15, $16, $17, $18
+);
+
 -- name: IncrementAPIKeyQuotaUsed :exec
 UPDATE api_keys SET quota_used = quota_used + $2 WHERE id = $1;

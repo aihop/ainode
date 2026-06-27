@@ -43,6 +43,7 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 			}
 			ctx = context.WithValue(ctx, reqctx.KeyUserID, user.ID)
 			ctx = context.WithValue(ctx, reqctx.KeyAPIKeyID, user.KeyID)
+			ctx = context.WithValue(ctx, reqctx.KeyTierLevel, user.UserTier.Int32)
 
 			// 如果不是主要的计费接口（比如 /v1/models 或 /v1/dashboard），直接放行
 			// 我们主要拦截会产生大量消耗的生成接口
@@ -87,6 +88,11 @@ func AuthAndPreDeductMiddleware(queries *db.Queries) func(http.Handler) http.Han
 
 				// 恢复 Body
 				r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+				// 请求审计日志：把原始请求体存入 context，供后续结算点异步写入
+				if config.AppConfig.RequestLog.Enabled {
+					r = r.WithContext(context.WithValue(r.Context(), reqctx.KeyInputPayload, bodyBytes))
+				}
 
 				switch {
 				case isChatRoute:
