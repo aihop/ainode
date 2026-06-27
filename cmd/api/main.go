@@ -328,8 +328,11 @@ func main() {
 
 	// 6. 启动服务器与优雅启停
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler: r,
+		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler:      r,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 120 * time.Second, // SSE 流式响应需要较长的写超时
+		IdleTimeout:  60 * time.Second,
 	}
 
 	go func() {

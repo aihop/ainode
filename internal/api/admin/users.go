@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"aihop.io/ainode/internal/api/httpx"
 	"aihop.io/ainode/internal/billing"
@@ -140,9 +141,14 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 			TotalSpend:       totalSpend,
 			ActiveKeyCount:   activeKeyCount,
 			Status:           status,
-			CreatedAt:        utils.FormatTime(user.CreatedAt),
-			LastLoginAt:      utils.FormatTime(user.LastLoginAt),
-			LastRequestAt:    utils.FormatTime(user.LastRequestAt),
+			CreatedAt:        utils.FormatTime(user.CreatedAt.Time),
+			LastLoginAt:      utils.FormatTime(user.LastLoginAt.Time),
+			LastRequestAt: func() string {
+				if t, ok := user.LastRequestAt.(time.Time); ok {
+					return utils.FormatTime(t)
+				}
+				return ""
+			}(),
 		})
 	}
 
@@ -224,7 +230,7 @@ func (h *AdminHandler) ListUserBalanceLogs(w http.ResponseWriter, r *http.Reques
 			OperatorAdminID: operatorAdminID,
 			OperatorName:    item.OperatorName,
 			Remark:          item.Remark,
-			CreatedAt:       utils.FormatTime(item.CreatedAt),
+			CreatedAt:       utils.FormatTime(item.CreatedAt.Time),
 		})
 	}
 

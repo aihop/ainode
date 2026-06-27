@@ -75,7 +75,7 @@ func (h *InternalHandler) BalanceLogsListHandler(w http.ResponseWriter, r *http.
 		}
 		createdAt := ""
 		if item.CreatedAt.Valid {
-			createdAt = utils.FormatTime(item.CreatedAt)
+			createdAt = utils.FormatTime(item.CreatedAt.Time)
 		}
 
 		resLogs = append(resLogs, LogItem{

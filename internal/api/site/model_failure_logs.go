@@ -120,7 +120,7 @@ func (h *InternalHandler) ModelFailureLogsListHandler(w http.ResponseWriter, r *
 			Response:    l.ResponseBody,
 			LatencyMs:   l.LatencyMs,
 			IsRetryable: l.IsRetryable,
-			Time:        utils.FormatTime(l.CreatedAt),
+			Time:        utils.FormatTime(l.CreatedAt.Time),
 		}
 		if l.ApiKeyID.Valid {
 			item.APIKeyID = l.ApiKeyID.Int32

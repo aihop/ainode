@@ -174,7 +174,7 @@ func (h *AdminHandler) ListChannelFailureLogs(w http.ResponseWriter, r *http.Req
 			ErrorMessage:    item.ErrorMessage,
 			LatencyMs:       item.LatencyMs,
 			CircuitState:    item.CircuitState,
-			CreatedAt:       utils.FormatTime(item.CreatedAt),
+			CreatedAt:       utils.FormatTime(item.CreatedAt.Time),
 		})
 	}
 

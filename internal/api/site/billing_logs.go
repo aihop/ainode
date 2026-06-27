@@ -112,7 +112,7 @@ func (h *InternalHandler) BillingLogsListHandler(w http.ResponseWriter, r *http.
 	for _, l := range logs {
 		resLogs = append(resLogs, LogItem{
 			ID:          formatUUID(l.ID),
-			Time:        utils.FormatTime(l.CreatedAt),
+			Time:        utils.FormatTime(l.CreatedAt.Time),
 			Model:       l.ModelName,
 			Input:       l.PromptTokens.Int32,
 			Output:      l.CompletionTokens.Int32,

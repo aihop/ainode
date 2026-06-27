@@ -2,17 +2,8 @@ package utils
 
 import "time"
 
-// FormatTime converts various time representations to RFC3339 UTC string.
-// Supports time.Time and pgtype-like interfaces with Value() (time.Time, bool).
-// Returns empty string for unsupported types or zero values.
-func FormatTime(value any) string {
-	switch v := value.(type) {
-	case interface{ Value() (time.Time, bool) }:
-		if ts, ok := v.Value(); ok {
-			return ts.UTC().Format(time.RFC3339)
-		}
-	case time.Time:
-		return v.UTC().Format(time.RFC3339)
-	}
-	return ""
+// FormatTime 将 time.Time 格式化为 RFC3339 UTC 字符串。
+// 调用方负责处理 pgtype 的零值判断（通过 Valid 字段）。
+func FormatTime(t time.Time) string {
+	return t.UTC().Format(time.RFC3339)
 }

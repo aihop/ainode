@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -423,9 +424,15 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 		Director:       director,
 		ModifyResponse: modifyResponse,
 		Transport: &FallbackTransport{
-			OriginalTransport: http.DefaultTransport,
-			MaxRetries:        2, // 失败最多重试2次下一个渠道
-			DBQueries:         queries,
+			OriginalTransport: &http.Transport{
+				DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ResponseHeaderTimeout: 30 * time.Second,
+				IdleConnTimeout:       90 * time.Second,
+				MaxIdleConnsPerHost:   100,
+			},
+			MaxRetries: 2, // 失败最多重试2次下一个渠道
+			DBQueries:  queries,
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Printf("Proxy Error: %v", err)

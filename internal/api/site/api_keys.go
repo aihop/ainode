@@ -93,7 +93,7 @@ func (h *InternalHandler) ListAPIKeysHandler(w http.ResponseWriter, r *http.Requ
 			Scope:     modelScope,
 			Status:    status,
 			QPS:       "Unlimited",
-			CreatedAt: utils.FormatTime(k.CreatedAt),
+			CreatedAt: utils.FormatTime(k.CreatedAt.Time),
 			ExpiresAt: "Never", // 根据业务逻辑，如果有过期时间可以读取
 			LastUsed:  "N/A",   // 需要单独记录
 		})

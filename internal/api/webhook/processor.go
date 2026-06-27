@@ -80,7 +80,7 @@ func (h *Handler) processTransaction(ctx context.Context, req transactionWebhook
 			AlreadyProcessed: true,
 			TransactionID:    existing.ID,
 			Status:           existing.Status,
-			CreatedAt:        utils.FormatTime(existing.CreatedAt),
+			CreatedAt:        utils.FormatTime(existing.CreatedAt.Time),
 		}, http.StatusOK, ""
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return transactionProcessResult{}, http.StatusInternalServerError, "Failed to check transaction idempotency"
@@ -161,7 +161,7 @@ func (h *Handler) processTransaction(ctx context.Context, req transactionWebhook
 					AlreadyProcessed: true,
 					TransactionID:    existing.ID,
 					Status:           existing.Status,
-					CreatedAt:        utils.FormatTime(existing.CreatedAt),
+					CreatedAt:        utils.FormatTime(existing.CreatedAt.Time),
 				}, http.StatusOK, ""
 			}
 		}
@@ -214,7 +214,7 @@ func (h *Handler) processTransaction(ctx context.Context, req transactionWebhook
 		TransactionID:    transaction.ID,
 		Status:           transaction.Status,
 		CacheSynced:      cacheSynced,
-		CreatedAt:        utils.FormatTime(transaction.CreatedAt),
+		CreatedAt:        utils.FormatTime(transaction.CreatedAt.Time),
 	}, http.StatusOK, ""
 }
 
