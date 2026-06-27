@@ -3,6 +3,7 @@ package site
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"aihop.io/ainode/internal/billing"
 	"golang.org/x/sync/errgroup"
@@ -28,6 +29,7 @@ func (h *InternalHandler) WalletHandler(w http.ResponseWriter, r *http.Request) 
 	var subBalance, grantBalance, cashBalance int64
 	var totalSpend int64
 	var totalFunded int64
+	var subExpiresAt *string
 
 	eg.Go(func() error {
 		// 还剩：优先 Redis 实时余额，缺失回源 DB。
@@ -49,6 +51,16 @@ func (h *InternalHandler) WalletHandler(w http.ResponseWriter, r *http.Request) 
 		// 进账：累计有效入账(充值+购买+套餐+直充，不含退款冲正)。
 		if f, ferr := h.queries.GetUserTotalCredited(egCtx, int32(userID)); ferr == nil {
 			totalFunded = f
+		}
+		return nil
+	})
+
+	eg.Go(func() error {
+		// 订阅到期时间：sub/grant 两池清零时间点。
+		user, uerr := h.queries.GetUserByID(egCtx, int32(userID))
+		if uerr == nil && user.SubExpiresAt.Valid {
+			iso := user.SubExpiresAt.Time.UTC().Format(time.RFC3339)
+			subExpiresAt = &iso
 		}
 		return nil
 	})
@@ -75,6 +87,8 @@ func (h *InternalHandler) WalletHandler(w http.ResponseWriter, r *http.Request) 
 			"grantCents": grantBalance,
 			"cash":       centsToMoneyPrecise(cashBalance),
 			"cashCents":  cashBalance,
+			// 订阅到期时间(ISO 8601)，无订阅则为 null
+			"subExpiresAt": subExpiresAt,
 		},
 	})
 }

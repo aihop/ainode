@@ -136,6 +136,8 @@ CREATE TABLE IF NOT EXISTS billing_logs (
     cache_hit_tokens INT DEFAULT 0, -- 缓存读取 Token 数量 (上游返回)
     cache_miss_tokens INT DEFAULT 0, -- 缓存创建 Token 数量 (上游返回)
     amount_cents BIGINT NOT NULL, -- 本次请求实际扣费 (折算倍率后)
+    log_type VARCHAR(20) NOT NULL DEFAULT 'consumption', -- consumption | refund
+    pre_deducted_cents BIGINT NOT NULL DEFAULT 0, -- 预扣金额 (10^8 放大)
     request_id VARCHAR(100),
     created_at TIMESTAMP
     WITH

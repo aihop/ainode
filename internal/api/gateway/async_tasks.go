@@ -245,7 +245,14 @@ func (h *GatewayHandler) CancelTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if task.PreDeductedCents > 0 && task.ActualCostCents == 0 {
-		billing.Refund(ctx, h.queries, task.UserID, task.PreDeductedCents, billing.Deduction{Sub: h.subOf(ctx, task.ID), Grant: task.GrantDeducted, Cash: task.CashDeducted}, task.RequestID)
+		billing.Refund(ctx, h.queries, task.UserID, task.PreDeductedCents,
+			billing.Deduction{Sub: h.subOf(ctx, task.ID), Grant: task.GrantDeducted, Cash: task.CashDeducted},
+			billing.SettlementRequest{
+				UserID:    task.UserID,
+				ChannelID: task.ChannelID.Int32,
+				ModelName: task.ModelName,
+				RequestID: task.RequestID,
+			})
 	}
 
 	writeJSON(w, http.StatusOK, taskResponse(task))
@@ -335,7 +342,14 @@ func (h *GatewayHandler) finalizeTerminalTask(ctx context.Context, task db.Async
 		}
 	case "failed", "canceled":
 		if task.PreDeductedCents > 0 && task.ActualCostCents == 0 {
-			billing.Refund(ctx, h.queries, task.UserID, task.PreDeductedCents, billing.Deduction{Sub: h.subOf(ctx, task.ID), Grant: task.GrantDeducted, Cash: task.CashDeducted}, task.RequestID)
+			billing.Refund(ctx, h.queries, task.UserID, task.PreDeductedCents,
+				billing.Deduction{Sub: h.subOf(ctx, task.ID), Grant: task.GrantDeducted, Cash: task.CashDeducted},
+				billing.SettlementRequest{
+					UserID:    task.UserID,
+					ChannelID: task.ChannelID.Int32,
+					ModelName: task.ModelName,
+					RequestID: task.RequestID,
+				})
 		}
 	}
 
@@ -369,7 +383,14 @@ func (h *GatewayHandler) failTaskAndRefund(ctx context.Context, task db.AsyncTas
 	}
 
 	if task.PreDeductedCents > 0 {
-		billing.Refund(ctx, h.queries, task.UserID, task.PreDeductedCents, billing.Deduction{Sub: h.subOf(ctx, task.ID), Grant: task.GrantDeducted, Cash: task.CashDeducted}, task.RequestID)
+		billing.Refund(ctx, h.queries, task.UserID, task.PreDeductedCents,
+			billing.Deduction{Sub: h.subOf(ctx, task.ID), Grant: task.GrantDeducted, Cash: task.CashDeducted},
+			billing.SettlementRequest{
+				UserID:    task.UserID,
+				ChannelID: task.ChannelID.Int32,
+				ModelName: task.ModelName,
+				RequestID: task.RequestID,
+			})
 	}
 	return task
 }

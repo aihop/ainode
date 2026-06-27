@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"log"
 	"net/http"
 
 	"aihop.io/ainode/internal/billing"
@@ -69,9 +70,24 @@ func RPMAndTPMMiddleware(queries *db.Queries, maxRPM int64, maxTPM int64) func(h
 				grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
 				cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
 				reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
+				apiKeyID, _ := ctx.Value(reqctx.KeyAPIKeyID).(int32)
+				channelID, _ := ctx.Value(reqctx.KeyCurrentChannelID).(int32)
+				modelName, _ := ctx.Value(reqctx.KeyPublicModelName).(string)
+				if modelName == "" {
+					modelName, _ = ctx.Value(reqctx.KeyModelName).(string)
+				}
+				promptTokens, _ := ctx.Value(reqctx.KeyPromptTokens).(int)
 				if preDeducted > 0 {
 					billing.Refund(context.Background(), queries, userID, preDeducted,
-						billing.Deduction{Sub: subDeducted, Grant: grantDeducted, Cash: cashDeducted}, reqID)
+						billing.Deduction{Sub: subDeducted, Grant: grantDeducted, Cash: cashDeducted},
+						billing.SettlementRequest{
+							UserID:       userID,
+							ApiKeyID:     apiKeyID,
+							ChannelID:    channelID,
+							ModelName:    modelName,
+							PromptTokens: int32(promptTokens),
+							RequestID:    reqID,
+						})
 				}
 			}
 
@@ -79,11 +95,10 @@ func RPMAndTPMMiddleware(queries *db.Queries, maxRPM int64, maxTPM int64) func(h
 			rpmKey := fmt.Sprintf("rate:rpm:%d", userID)
 			rpmAllowed, err := checkRateLimit(ctx, rpmKey, 60, maxRPM, 1)
 			if err != nil {
-				refundPreDeduction()
-				utils.WriteOpenAIError(w, http.StatusInternalServerError, "Internal Server Error", "server_error", "")
-				return
-			}
-			if !rpmAllowed {
+				// Redis 临时不可用时 fail-open：限流是保护措施而非安全边界，
+				// 阻断所有合法请求比放宽限流危害更大。
+				log.Printf("WARN: RPM rate limit check failed (Redis error): %v, allowing request", err)
+			} else if !rpmAllowed {
 				refundPreDeduction()
 				utils.WriteOpenAIError(w, http.StatusTooManyRequests, "RPM limit exceeded", "rate_limit_error", "rpm_exceeded")
 				return
@@ -93,11 +108,8 @@ func RPMAndTPMMiddleware(queries *db.Queries, maxRPM int64, maxTPM int64) func(h
 			tpmKey := fmt.Sprintf("rate:tpm:%d", userID)
 			tpmAllowed, err := checkRateLimit(ctx, tpmKey, 60, maxTPM, estimatedTokens)
 			if err != nil {
-				refundPreDeduction()
-				utils.WriteOpenAIError(w, http.StatusInternalServerError, "Internal Server Error", "server_error", "")
-				return
-			}
-			if !tpmAllowed {
+				log.Printf("WARN: TPM rate limit check failed (Redis error): %v, allowing request", err)
+			} else if !tpmAllowed {
 				refundPreDeduction()
 				utils.WriteOpenAIError(w, http.StatusTooManyRequests, "TPM limit exceeded", "rate_limit_error", "tpm_exceeded")
 				return

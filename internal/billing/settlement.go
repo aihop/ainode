@@ -43,6 +43,7 @@ type SettlementRequest struct {
 	GrantDeducted    int64  `json:"grant_deducted"`
 	CashDeducted     int64  `json:"cash_deducted"`
 	ActualCostCents  int64  `json:"actual_cost_cents"`
+	LogType          string `json:"log_type"` // "consumption" | "refund"
 	RequestID        string `json:"request_id"`
 }
 
@@ -53,7 +54,8 @@ func balanceKeys3(userID int32) []string {
 
 // Refund 退还预扣费 (发生系统错误或完全未消费时调用)。
 // 按消费逆序退回 cash→grant→sub,各池最多退回其当初扣额。
-func Refund(ctx context.Context, queries *db.Queries, userID int32, amountCents int64, d Deduction, requestID string) {
+// 同时写入 billing_log (log_type=refund, amount_cents=0)，确保全额退费有账单可查。
+func Refund(ctx context.Context, queries *db.Queries, userID int32, amountCents int64, d Deduction, logReq SettlementRequest) {
 	if amountCents <= 0 {
 		return
 	}
@@ -63,7 +65,34 @@ func Refund(ctx context.Context, queries *db.Queries, userID int32, amountCents 
 		log.Printf("ERROR: Failed to refund redis balance for user %d: %v", userID, err)
 	}
 
-	log.Printf("Refunded %d cents to user %d for failed request %s", amountCents, userID, requestID)
+	log.Printf("Refunded %d cents to user %d for failed request %s", amountCents, userID, logReq.RequestID)
+
+	// 写入退费账单: amount_cents=0 表示零消费, pre_deducted_cents 记录原预扣金额
+	logReq.LogType = "refund"
+	logReq.ActualCostCents = 0
+	logReq.PreDeductedCents = amountCents
+	logReq.SubDeducted = d.Sub
+	logReq.GrantDeducted = d.Grant
+	logReq.CashDeducted = d.Cash
+
+	payload, err := json.Marshal(logReq)
+	if err != nil {
+		log.Printf("ERROR: Failed to marshal refund billing log: %v", err)
+		return
+	}
+
+	task := asynq.NewTask(TaskRecordBillingLog, payload)
+	info, err := AsynqClient.EnqueueContext(ctx, task, asynq.Queue("ainode_billing"), asynq.MaxRetry(5))
+	if err != nil {
+		// asynq 投递失败，落入 outbox 兜底
+		if queries != nil && logReq.RequestID != "" {
+			_ = queries.InsertSettlementOutbox(ctx, logReq.RequestID, payload)
+		}
+		log.Printf("WARN: Failed to enqueue refund billing task for request %s: %v", logReq.RequestID, err)
+		return
+	}
+
+	log.Printf("Refund billing log enqueued for request %s (task %s)", logReq.RequestID, info.ID)
 }
 
 // Settle 完成流式/普通请求后的结算逻辑（多退少补）

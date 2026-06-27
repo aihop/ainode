@@ -46,6 +46,7 @@ type AsyncTask struct {
 	SubmittedAt      pgtype.Timestamptz
 	FinishedAt       pgtype.Timestamptz
 	CanceledAt       pgtype.Timestamptz
+	SubDeducted      int64
 }
 
 type BalanceLog struct {
@@ -73,6 +74,8 @@ type BillingLog struct {
 	CacheHitTokens   pgtype.Int4
 	CacheMissTokens  pgtype.Int4
 	AmountCents      int64
+	LogType          string
+	PreDeductedCents int64
 	RequestID        pgtype.Text
 	CreatedAt        pgtype.Timestamptz
 }
@@ -168,8 +171,9 @@ type User struct {
 	CashBalance  pgtype.Int8
 	GrantBalance pgtype.Int8
 	TierLevel    pgtype.Int4
-	SubExpiresAt pgtype.Timestamptz
 	Status       pgtype.Int4
 	LastLoginAt  pgtype.Timestamptz
 	CreatedAt    pgtype.Timestamptz
+	SubBalance   int64
+	SubExpiresAt pgtype.Timestamptz
 }

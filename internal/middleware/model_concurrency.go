@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -62,9 +63,24 @@ func refundPreDeduction(ctx context.Context, queries *db.Queries, userID int32) 
 	grantDeducted, _ := ctx.Value(reqctx.KeyGrantDeducted).(int64)
 	cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
 	reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
+	apiKeyID, _ := ctx.Value(reqctx.KeyAPIKeyID).(int32)
+	channelID, _ := ctx.Value(reqctx.KeyCurrentChannelID).(int32)
+	modelName, _ := ctx.Value(reqctx.KeyPublicModelName).(string)
+	if modelName == "" {
+		modelName, _ = ctx.Value(reqctx.KeyModelName).(string)
+	}
+	promptTokens, _ := ctx.Value(reqctx.KeyPromptTokens).(int)
 	if preDeducted > 0 {
 		billing.Refund(context.Background(), queries, userID, preDeducted,
-			billing.Deduction{Sub: subDeducted, Grant: grantDeducted, Cash: cashDeducted}, reqID)
+			billing.Deduction{Sub: subDeducted, Grant: grantDeducted, Cash: cashDeducted},
+			billing.SettlementRequest{
+				UserID:       userID,
+				ApiKeyID:     apiKeyID,
+				ChannelID:    channelID,
+				ModelName:    modelName,
+				PromptTokens: int32(promptTokens),
+				RequestID:    reqID,
+			})
 	}
 }
 
@@ -101,16 +117,18 @@ func ModelConcurrencyMiddleware(queries *db.Queries) func(http.Handler) http.Han
 
 			release, err := acquireModelConcurrencySlot(ctx, modelName, modelInfo.MaxConcurrency)
 			if err != nil {
-				refundPreDeduction(ctx, queries, userID)
 				if errors.Is(err, errModelConcurrencyExceeded) {
+					refundPreDeduction(ctx, queries, userID)
 					utils.WriteOpenAIError(w, http.StatusTooManyRequests, "Model concurrency limit exceeded", "rate_limit_error", "model_concurrency_exceeded")
 					return
 				}
 
-				utils.WriteOpenAIError(w, http.StatusInternalServerError, "Internal Server Error", "server_error", "")
-				return
+				// Redis 临时不可用时 fail-open：并发限制是保护措施而非安全边界，
+				// 阻断所有合法请求比放宽并发限制危害更大。
+				log.Printf("WARN: Model concurrency slot acquire failed (Redis error): %v, allowing request", err)
+			} else {
+				defer release()
 			}
-			defer release()
 
 			next.ServeHTTP(w, r)
 		})

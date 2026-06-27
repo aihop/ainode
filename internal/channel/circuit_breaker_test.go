@@ -10,7 +10,9 @@ func TestCircuitBreaker_OpensAfterThreshold(t *testing.T) {
 		t.Fatal("fresh channel should not be blocked")
 	}
 
-	// 阈值为 3：前两次失败仍放行，第三次打开。
+	// 阈值为 5：前四次失败仍放行，第五次打开。
+	m.MarkChannelFailed(ch)
+	m.MarkChannelFailed(ch)
 	m.MarkChannelFailed(ch)
 	m.MarkChannelFailed(ch)
 	if m.isCircuitBlocked(ch) {
@@ -26,9 +28,9 @@ func TestCircuitBreaker_SuccessResets(t *testing.T) {
 	m := &Manager{}
 	const ch int32 = 9002
 
-	m.MarkChannelFailed(ch)
-	m.MarkChannelFailed(ch)
-	m.MarkChannelFailed(ch)
+	for i := 0; i < 5; i++ {
+		m.MarkChannelFailed(ch)
+	}
 	if !m.isCircuitBlocked(ch) {
 		t.Fatal("precondition: channel should be open")
 	}
@@ -43,9 +45,9 @@ func TestCircuitBreaker_ManualReset(t *testing.T) {
 	m := &Manager{}
 	const ch int32 = 9003
 
-	m.MarkChannelFailed(ch)
-	m.MarkChannelFailed(ch)
-	m.MarkChannelFailed(ch)
+	for i := 0; i < 5; i++ {
+		m.MarkChannelFailed(ch)
+	}
 	if !m.isCircuitBlocked(ch) {
 		t.Fatal("precondition: channel should be open")
 	}

@@ -227,7 +227,7 @@ VALUES (
         $15,
         $16,
         $17
-    ) RETURNING id, user_id, channel_id, request_id, task_type, provider, model_name, status, upstream_task_id, input_payload, output_payload, error_payload, metadata, pre_deducted_cents, grant_deducted, cash_deducted, actual_cost_cents, created_at, updated_at, submitted_at, finished_at, canceled_at
+    ) RETURNING id, user_id, channel_id, request_id, task_type, provider, model_name, status, upstream_task_id, input_payload, output_payload, error_payload, metadata, pre_deducted_cents, grant_deducted, cash_deducted, actual_cost_cents, created_at, updated_at, submitted_at, finished_at, canceled_at, sub_deducted
 `
 
 type CreateAsyncTaskParams struct {
@@ -297,6 +297,7 @@ func (q *Queries) CreateAsyncTask(ctx context.Context, arg CreateAsyncTaskParams
 		&i.SubmittedAt,
 		&i.FinishedAt,
 		&i.CanceledAt,
+		&i.SubDeducted,
 	)
 	return i, err
 }
@@ -359,6 +360,8 @@ INSERT INTO
         cache_hit_tokens,
         cache_miss_tokens,
         amount_cents,
+        log_type,
+        pre_deducted_cents,
         request_id
     )
 VALUES (
@@ -371,8 +374,10 @@ VALUES (
         $7,
         $8,
         $9,
-        $10
-    ) RETURNING id, user_id, channel_id, model_name, prompt_tokens, completion_tokens, cache_hit_tokens, cache_miss_tokens, amount_cents, request_id, created_at
+        $10,
+        $11,
+        $12
+    ) RETURNING id, user_id, channel_id, model_name, prompt_tokens, completion_tokens, cache_hit_tokens, cache_miss_tokens, amount_cents, log_type, pre_deducted_cents, request_id, created_at
 `
 
 type CreateBillingLogParams struct {
@@ -385,6 +390,8 @@ type CreateBillingLogParams struct {
 	CacheHitTokens   pgtype.Int4
 	CacheMissTokens  pgtype.Int4
 	AmountCents      int64
+	LogType          string
+	PreDeductedCents int64
 	RequestID        pgtype.Text
 }
 
@@ -399,6 +406,8 @@ func (q *Queries) CreateBillingLog(ctx context.Context, arg CreateBillingLogPara
 		arg.CacheHitTokens,
 		arg.CacheMissTokens,
 		arg.AmountCents,
+		arg.LogType,
+		arg.PreDeductedCents,
 		arg.RequestID,
 	)
 	var i BillingLog
@@ -412,6 +421,8 @@ func (q *Queries) CreateBillingLog(ctx context.Context, arg CreateBillingLogPara
 		&i.CacheHitTokens,
 		&i.CacheMissTokens,
 		&i.AmountCents,
+		&i.LogType,
+		&i.PreDeductedCents,
 		&i.RequestID,
 		&i.CreatedAt,
 	)
@@ -789,7 +800,7 @@ func (q *Queries) DeleteModel(ctx context.Context, modelName string) error {
 }
 
 const getAsyncTaskByIDAndUser = `-- name: GetAsyncTaskByIDAndUser :one
-SELECT id, user_id, channel_id, request_id, task_type, provider, model_name, status, upstream_task_id, input_payload, output_payload, error_payload, metadata, pre_deducted_cents, grant_deducted, cash_deducted, actual_cost_cents, created_at, updated_at, submitted_at, finished_at, canceled_at
+SELECT id, user_id, channel_id, request_id, task_type, provider, model_name, status, upstream_task_id, input_payload, output_payload, error_payload, metadata, pre_deducted_cents, grant_deducted, cash_deducted, actual_cost_cents, created_at, updated_at, submitted_at, finished_at, canceled_at, sub_deducted
 FROM async_tasks
 WHERE
     id = $1
@@ -828,6 +839,7 @@ func (q *Queries) GetAsyncTaskByIDAndUser(ctx context.Context, arg GetAsyncTaskB
 		&i.SubmittedAt,
 		&i.FinishedAt,
 		&i.CanceledAt,
+		&i.SubDeducted,
 	)
 	return i, err
 }
@@ -1002,7 +1014,9 @@ SELECT
     completion_tokens,
     cache_hit_tokens,
     cache_miss_tokens,
-    amount_cents
+    amount_cents,
+    log_type,
+    pre_deducted_cents
 FROM billing_logs
 WHERE user_id = $1
   AND ($2::varchar = '' OR model_name = $2)
@@ -1028,6 +1042,8 @@ type GetUserBillingLogsRow struct {
 	CacheHitTokens   pgtype.Int4
 	CacheMissTokens  pgtype.Int4
 	AmountCents      int64
+	LogType          string
+	PreDeductedCents int64
 }
 
 func (q *Queries) GetUserBillingLogs(ctx context.Context, arg GetUserBillingLogsParams) ([]GetUserBillingLogsRow, error) {
@@ -1054,6 +1070,8 @@ func (q *Queries) GetUserBillingLogs(ctx context.Context, arg GetUserBillingLogs
 			&i.CacheHitTokens,
 			&i.CacheMissTokens,
 			&i.AmountCents,
+			&i.LogType,
+			&i.PreDeductedCents,
 		); err != nil {
 			return nil, err
 		}
@@ -1107,7 +1125,7 @@ type GetUserByAPIKeyRow struct {
 	AvatarUrl     pgtype.Text
 	CashBalance   pgtype.Int8
 	GrantBalance  pgtype.Int8
-	SubBalance    pgtype.Int8
+	SubBalance    int64
 	UserTier      pgtype.Int4
 	SubExpiresAt  pgtype.Timestamptz
 	Status        pgtype.Int4
@@ -1157,7 +1175,7 @@ func (q *Queries) GetUserByAPIKey(ctx context.Context, keyString string) (GetUse
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, nickname, avatar_url, cash_balance, grant_balance, tier_level, sub_expires_at, status, last_login_at, created_at FROM users WHERE id = $1 LIMIT 1
+SELECT id, email, password_hash, nickname, avatar_url, cash_balance, grant_balance, tier_level, status, last_login_at, created_at, sub_balance, sub_expires_at FROM users WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
@@ -1172,16 +1190,17 @@ func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 		&i.CashBalance,
 		&i.GrantBalance,
 		&i.TierLevel,
-		&i.SubExpiresAt,
 		&i.Status,
 		&i.LastLoginAt,
 		&i.CreatedAt,
+		&i.SubBalance,
+		&i.SubExpiresAt,
 	)
 	return i, err
 }
 
 const getUserByIDForUpdate = `-- name: GetUserByIDForUpdate :one
-SELECT id, email, password_hash, nickname, avatar_url, cash_balance, grant_balance, tier_level, sub_expires_at, status, last_login_at, created_at FROM users WHERE id = $1 FOR UPDATE
+SELECT id, email, password_hash, nickname, avatar_url, cash_balance, grant_balance, tier_level, status, last_login_at, created_at, sub_balance, sub_expires_at FROM users WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id int32) (User, error) {
@@ -1196,10 +1215,11 @@ func (q *Queries) GetUserByIDForUpdate(ctx context.Context, id int32) (User, err
 		&i.CashBalance,
 		&i.GrantBalance,
 		&i.TierLevel,
-		&i.SubExpiresAt,
 		&i.Status,
 		&i.LastLoginAt,
 		&i.CreatedAt,
+		&i.SubBalance,
+		&i.SubExpiresAt,
 	)
 	return i, err
 }
@@ -1732,7 +1752,7 @@ func (q *Queries) ListBalanceLogsByUser(ctx context.Context, arg ListBalanceLogs
 }
 
 const listBillingLogs = `-- name: ListBillingLogs :many
-SELECT id, user_id, channel_id, model_name, prompt_tokens, completion_tokens, cache_hit_tokens, cache_miss_tokens, amount_cents, request_id, created_at
+SELECT id, user_id, channel_id, model_name, prompt_tokens, completion_tokens, cache_hit_tokens, cache_miss_tokens, amount_cents, log_type, pre_deducted_cents, request_id, created_at
 FROM billing_logs
 ORDER BY created_at DESC
 LIMIT $1
@@ -1764,6 +1784,8 @@ func (q *Queries) ListBillingLogs(ctx context.Context, arg ListBillingLogsParams
 			&i.CacheHitTokens,
 			&i.CacheMissTokens,
 			&i.AmountCents,
+			&i.LogType,
+			&i.PreDeductedCents,
 			&i.RequestID,
 			&i.CreatedAt,
 		); err != nil {
@@ -1963,7 +1985,7 @@ SET
         ELSE canceled_at
     END
 WHERE
-    id = $1 RETURNING id, user_id, channel_id, request_id, task_type, provider, model_name, status, upstream_task_id, input_payload, output_payload, error_payload, metadata, pre_deducted_cents, grant_deducted, cash_deducted, actual_cost_cents, created_at, updated_at, submitted_at, finished_at, canceled_at
+    id = $1 RETURNING id, user_id, channel_id, request_id, task_type, provider, model_name, status, upstream_task_id, input_payload, output_payload, error_payload, metadata, pre_deducted_cents, grant_deducted, cash_deducted, actual_cost_cents, created_at, updated_at, submitted_at, finished_at, canceled_at, sub_deducted
 `
 
 type MarkAsyncTaskStatusParams struct {
@@ -2008,6 +2030,7 @@ func (q *Queries) MarkAsyncTaskStatus(ctx context.Context, arg MarkAsyncTaskStat
 		&i.SubmittedAt,
 		&i.FinishedAt,
 		&i.CanceledAt,
+		&i.SubDeducted,
 	)
 	return i, err
 }
@@ -2024,7 +2047,7 @@ SET
     submitted_at = NOW(),
     updated_at = NOW()
 WHERE
-    id = $1 RETURNING id, user_id, channel_id, request_id, task_type, provider, model_name, status, upstream_task_id, input_payload, output_payload, error_payload, metadata, pre_deducted_cents, grant_deducted, cash_deducted, actual_cost_cents, created_at, updated_at, submitted_at, finished_at, canceled_at
+    id = $1 RETURNING id, user_id, channel_id, request_id, task_type, provider, model_name, status, upstream_task_id, input_payload, output_payload, error_payload, metadata, pre_deducted_cents, grant_deducted, cash_deducted, actual_cost_cents, created_at, updated_at, submitted_at, finished_at, canceled_at, sub_deducted
 `
 
 type MarkAsyncTaskSubmittedParams struct {
@@ -2071,6 +2094,7 @@ func (q *Queries) MarkAsyncTaskSubmitted(ctx context.Context, arg MarkAsyncTaskS
 		&i.SubmittedAt,
 		&i.FinishedAt,
 		&i.CanceledAt,
+		&i.SubDeducted,
 	)
 	return i, err
 }
@@ -2087,6 +2111,33 @@ type RotateAPIKeyParams struct {
 
 func (q *Queries) RotateAPIKey(ctx context.Context, arg RotateAPIKeyParams) error {
 	_, err := q.db.Exec(ctx, rotateAPIKey, arg.KeyString, arg.ID, arg.UserID)
+	return err
+}
+
+const setSubscriptionFields = `-- name: SetSubscriptionFields :exec
+UPDATE users
+SET
+    grant_balance = $2,
+    sub_expires_at = $3,
+    tier_level = $4
+WHERE
+    id = $1
+`
+
+type SetSubscriptionFieldsParams struct {
+	ID           int32
+	GrantBalance pgtype.Int8
+	SubExpiresAt pgtype.Timestamptz
+	TierLevel    pgtype.Int4
+}
+
+func (q *Queries) SetSubscriptionFields(ctx context.Context, arg SetSubscriptionFieldsParams) error {
+	_, err := q.db.Exec(ctx, setSubscriptionFields,
+		arg.ID,
+		arg.GrantBalance,
+		arg.SubExpiresAt,
+		arg.TierLevel,
+	)
 	return err
 }
 
@@ -2283,7 +2334,11 @@ func (q *Queries) UpdateModel(ctx context.Context, arg UpdateModelParams) (Model
 const updateUserGrantBalance = `-- name: UpdateUserGrantBalance :exec
 UPDATE users
 SET
-    grant_balance = grant_balance + $2
+    grant_balance = grant_balance + $2,
+    sub_expires_at = CASE
+        WHEN sub_expires_at IS NULL AND $2 > 0 THEN NOW() + INTERVAL '30 days'
+        ELSE sub_expires_at
+    END
 WHERE
     id = $1
 `
@@ -2295,33 +2350,6 @@ type UpdateUserGrantBalanceParams struct {
 
 func (q *Queries) UpdateUserGrantBalance(ctx context.Context, arg UpdateUserGrantBalanceParams) error {
 	_, err := q.db.Exec(ctx, updateUserGrantBalance, arg.ID, arg.GrantBalance)
-	return err
-}
-
-const setSubscriptionFields = `-- name: SetSubscriptionFields :exec
-UPDATE users
-SET
-    grant_balance = $2,
-    sub_expires_at = $3,
-    tier_level = $4
-WHERE
-    id = $1
-`
-
-type SetSubscriptionFieldsParams struct {
-	ID           int32
-	GrantBalance pgtype.Int8
-	SubExpiresAt pgtype.Timestamptz
-	TierLevel    pgtype.Int4
-}
-
-func (q *Queries) SetSubscriptionFields(ctx context.Context, arg SetSubscriptionFieldsParams) error {
-	_, err := q.db.Exec(ctx, setSubscriptionFields,
-		arg.ID,
-		arg.GrantBalance,
-		arg.SubExpiresAt,
-		arg.TierLevel,
-	)
 	return err
 }
 

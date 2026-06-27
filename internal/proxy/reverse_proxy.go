@@ -57,7 +57,25 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		req.Body.Close()
 	}
 
+	// retryBackoff 为重试之间提供递增退避延时。
+	// 首次重试 200ms，之后翻倍，上限 2s。
+	retryBackoff := 200 * time.Millisecond
+	const maxBackoff = 2 * time.Second
+
 	for i := 0; i <= t.MaxRetries; i++ {
+		// 重试前等待退避延时（首次请求 i==0 不等待）
+		if i > 0 {
+			select {
+			case <-time.After(retryBackoff):
+			case <-req.Context().Done():
+				return nil, req.Context().Err()
+			}
+			retryBackoff *= 2
+			if retryBackoff > maxBackoff {
+				retryBackoff = maxBackoff
+			}
+		}
+
 		// 每次请求前恢复 Body
 		if reqBodyBytes != nil {
 			req.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
@@ -88,13 +106,24 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 			requiredCaps.AsyncTask = true
 		}
 
-		// 获取下一个支持该模型的可用渠道，并跳过本次请求已经失败过的渠道
+		// 获取下一个支持该模型的可用渠道。
+		// attemptedChannels 记录本次请求已失败过的渠道，用于优先尝试其他渠道；
+		// 但当所有渠道都已尝试过后，允许重试已失败的渠道（针对单渠道场景）。
 		var ch *db.Channel
 		var errChan error
 		if requiredCaps.Image || requiredCaps.Video {
 			ch, errChan = channel.GlobalManager.GetNextChannelForCapabilitiesExcluding(publicModelName, requiredCaps, attemptedChannels)
 		} else {
 			ch, errChan = channel.GlobalManager.GetNextChannelExcluding(publicModelName, attemptedChannels)
+		}
+		if errChan != nil {
+			// 无未尝试过的渠道时，回退到任意可用渠道（含已失败过的），
+			// 确保单渠道模型也能享受重试。
+			if requiredCaps.Image || requiredCaps.Video {
+				ch, errChan = channel.GlobalManager.GetNextChannelForCapabilities(publicModelName, requiredCaps)
+			} else {
+				ch, errChan = channel.GlobalManager.GetNextChannel(publicModelName)
+			}
 		}
 		if errChan != nil {
 			return nil, fmt.Errorf("no available channels for model %s: %w", publicModelName, errChan)
@@ -268,7 +297,14 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			if preDeductedCents > 0 {
 				log.Printf("Upstream error %d from channel %d, refunding...", resp.StatusCode, channelID)
 				rctx, rcancel := newBillingWriteCtx()
-				billing.Refund(rctx, queries, userID, preDeductedCents, prededuction, reqID)
+				billing.Refund(rctx, queries, userID, preDeductedCents, prededuction, billing.SettlementRequest{
+					UserID:       userID,
+					ApiKeyID:     apiKeyID,
+					ChannelID:    channelID,
+					ModelName:    publicModelName,
+					PromptTokens: int32(promptTokens),
+					RequestID:    reqID,
+				})
 				rcancel()
 			}
 			// 监控埋点：记录失败请求
@@ -342,6 +378,7 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				GrantDeducted:    grantDeducted,
 				CashDeducted:     cashDeducted,
 				ActualCostCents:  actualCost,
+				LogType:          "consumption",
 				RequestID:        reqID,
 			}
 
@@ -409,7 +446,14 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				log.Printf("Failed to read non-stream response body for settlement (req %s): %v, refunding pre-deduct", reqID, err)
 				if preDeductedCents > 0 {
 					nctx, ncancel := newBillingWriteCtx()
-					billing.Refund(nctx, queries, userID, preDeductedCents, prededuction, reqID)
+					billing.Refund(nctx, queries, userID, preDeductedCents, prededuction, billing.SettlementRequest{
+						UserID:       userID,
+						ApiKeyID:     apiKeyID,
+						ChannelID:    channelID,
+						ModelName:    publicModelName,
+						PromptTokens: int32(promptTokens),
+						RequestID:    reqID,
+					})
 					ncancel()
 				}
 			}
@@ -427,9 +471,10 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 			OriginalTransport: &http.Transport{
 				DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
 				TLSHandshakeTimeout:   10 * time.Second,
-				ResponseHeaderTimeout: 30 * time.Second,
+				ResponseHeaderTimeout: 90 * time.Second, // AI 模型高峰期首 token 延迟可能超过 30s
 				IdleConnTimeout:       90 * time.Second,
 				MaxIdleConnsPerHost:   100,
+				MaxConnsPerHost:       100, // 防止对单个上游无限制建连
 			},
 			MaxRetries: 2, // 失败最多重试2次下一个渠道
 			DBQueries:  queries,
@@ -448,9 +493,24 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				cashDeducted, _ := ctx.Value(reqctx.KeyCashDeducted).(int64)
 				reqID, _ := ctx.Value(reqctx.KeyRequestID).(string)
 				if preDeductedCents > 0 {
+					apiKeyID, _ := ctx.Value(reqctx.KeyAPIKeyID).(int32)
+					channelID, _ := ctx.Value(reqctx.KeyCurrentChannelID).(int32)
+					modelName, _ := ctx.Value(reqctx.KeyPublicModelName).(string)
+					if modelName == "" {
+						modelName, _ = ctx.Value(reqctx.KeyModelName).(string)
+					}
+					promptTokens, _ := ctx.Value(reqctx.KeyPromptTokens).(int)
 					ectx, ecancel := newBillingWriteCtx()
 					billing.Refund(ectx, queries, userID, preDeductedCents,
-						billing.Deduction{Sub: subDeducted, Grant: grantDeducted, Cash: cashDeducted}, reqID)
+						billing.Deduction{Sub: subDeducted, Grant: grantDeducted, Cash: cashDeducted},
+						billing.SettlementRequest{
+							UserID:       userID,
+							ApiKeyID:     apiKeyID,
+							ChannelID:    channelID,
+							ModelName:    modelName,
+							PromptTokens: int32(promptTokens),
+							RequestID:    reqID,
+						})
 					ecancel()
 				}
 			}

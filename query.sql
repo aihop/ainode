@@ -133,6 +133,8 @@ INSERT INTO
         cache_hit_tokens,
         cache_miss_tokens,
         amount_cents,
+        log_type,
+        pre_deducted_cents,
         request_id
     )
 VALUES (
@@ -145,7 +147,9 @@ VALUES (
         $7,
         $8,
         $9,
-        $10
+        $10,
+        $11,
+        $12
     ) RETURNING *;
 
 -- ==========================================
@@ -688,7 +692,9 @@ SELECT
     completion_tokens,
     cache_hit_tokens,
     cache_miss_tokens,
-    amount_cents
+    amount_cents,
+    log_type,
+    pre_deducted_cents
 FROM billing_logs
 WHERE user_id = sqlc.arg(user_id)
   AND (sqlc.arg(model_name)::varchar = '' OR model_name = sqlc.arg(model_name))

@@ -19,7 +19,9 @@ const (
 )
 
 const (
-	failureThreshold = int64(3)
+	// failureThreshold 从 3 提升到 5，避免上游短暂抖动（如 10 秒的 503 波动）
+	// 就触发 30 秒的完全断路，导致正常流量被长期阻塞。
+	failureThreshold = int64(5)
 	cooldownDuration = 30 * time.Second
 )
 

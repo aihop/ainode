@@ -92,7 +92,13 @@ func (q *Queries) GetUserBalances(ctx context.Context, userID int32) (sub int64,
 }
 
 const updateUserSubBalance = `-- name: UpdateUserSubBalance :exec
-UPDATE users SET sub_balance = sub_balance + $2 WHERE id = $1
+UPDATE users SET
+    sub_balance = sub_balance + $2,
+    sub_expires_at = CASE
+        WHEN sub_expires_at IS NULL AND $2 > 0 THEN NOW() + INTERVAL '30 days'
+        ELSE sub_expires_at
+    END
+WHERE id = $1
 `
 
 // UpdateUserSubBalance 对订阅 sub 池做增量(传负数为扣减)。

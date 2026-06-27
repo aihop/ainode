@@ -62,9 +62,9 @@ func (t GenericErrorTranslator) Translate(statusCode int, body []byte) *Provider
 
 	if message == "" {
 		if t.Provider != "" {
-			message = fmt.Sprintf("%s upstream request failed", t.Provider)
+			message = fmt.Sprintf("%s upstream returned HTTP %d", t.Provider, statusCode)
 		} else {
-			message = "upstream request failed"
+			message = fmt.Sprintf("upstream returned HTTP %d", statusCode)
 		}
 	}
 

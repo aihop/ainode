@@ -130,6 +130,8 @@ func (processor *BillingTaskProcessor) HandleRecordBillingLog(ctx context.Contex
 		CacheHitTokens:   cacheHitTokens,
 		CacheMissTokens:  cacheMissTokens,
 		AmountCents:      req.ActualCostCents,
+		LogType:          req.LogType,
+		PreDeductedCents: req.PreDeductedCents,
 		RequestID:        reqID,
 	}); err != nil {
 		log.Printf("Worker ERROR: Failed to create billing log for request %s: %v", req.RequestID, err)
