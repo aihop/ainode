@@ -95,19 +95,24 @@ func parsePagination(r *http.Request, defaultPageSize int) (int, int, int) {
 // ListUsers returns aggregated API customer stats for the ainode admin console.
 func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	keyword := r.URL.Query().Get("keyword")
+	hasSpending := r.URL.Query().Get("hasSpending") == "true"
 	page, pageSize, offset := parsePagination(r, 20)
 
 	users, err := h.queries.ListUsersForAdmin(r.Context(), db.ListUsersForAdminParams{
-		Keyword:   keyword,
-		LimitVal:  int32(pageSize),
-		OffsetVal: int32(offset),
+		Keyword:     keyword,
+		HasSpending: hasSpending,
+		LimitVal:    int32(pageSize),
+		OffsetVal:   int32(offset),
 	})
 	if err != nil {
 		errorResponse(w, http.StatusInternalServerError, "Failed to fetch users")
 		return
 	}
 
-	total, err := h.queries.CountUsersForAdmin(r.Context(), keyword)
+	total, err := h.queries.CountUsersForAdmin(r.Context(), db.CountUsersForAdminParams{
+		Keyword:     keyword,
+		HasSpending: hasSpending,
+	})
 	if err != nil {
 		errorResponse(w, http.StatusInternalServerError, "Failed to count users")
 		return
@@ -159,8 +164,12 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 // 前端可单独、低频拉取并缓存）。
 func (h *AdminHandler) UsersSummary(w http.ResponseWriter, r *http.Request) {
 	keyword := r.URL.Query().Get("keyword")
+	hasSpending := r.URL.Query().Get("hasSpending") == "true"
 
-	summary, err := h.queries.GetUsersSummaryForAdmin(r.Context(), keyword)
+	summary, err := h.queries.GetUsersSummaryForAdmin(r.Context(), db.GetUsersSummaryForAdminParams{
+		Keyword:     keyword,
+		HasSpending: hasSpending,
+	})
 	if err != nil {
 		errorResponse(w, http.StatusInternalServerError, "Failed to summarize users")
 		return

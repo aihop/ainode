@@ -120,16 +120,32 @@ func (q *Queries) CountUserModelFailureLogs(ctx context.Context, arg CountUserMo
 const countUsersForAdmin = `-- name: CountUsersForAdmin :one
 SELECT COUNT(*)
 FROM users u
+LEFT JOIN (
+    SELECT
+        user_id,
+        COALESCE(SUM(amount_cents), 0)::bigint AS total_amount_cents
+    FROM billing_logs
+    GROUP BY user_id
+) user_usage ON user_usage.user_id = u.id
 WHERE
     (
         $1::text = ''
         OR u.email ILIKE '%' || $1::text || '%'
         OR COALESCE(u.nickname, '') ILIKE '%' || $1::text || '%'
     )
+    AND (
+        $2::boolean = false
+        OR (user_usage.total_amount_cents IS NOT NULL AND user_usage.total_amount_cents > 0)
+    )
 `
 
-func (q *Queries) CountUsersForAdmin(ctx context.Context, keyword string) (int64, error) {
-	row := q.db.QueryRow(ctx, countUsersForAdmin, keyword)
+type CountUsersForAdminParams struct {
+	Keyword     string `json:"keyword"`
+	HasSpending bool   `json:"hasSpending"`
+}
+
+func (q *Queries) CountUsersForAdmin(ctx context.Context, arg CountUsersForAdminParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUsersForAdmin, arg.Keyword, arg.HasSpending)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1436,6 +1452,12 @@ WITH filtered_users AS (
             OR u.email ILIKE '%' || $1::text || '%'
             OR COALESCE(u.nickname, '') ILIKE '%' || $1::text || '%'
         )
+        AND (
+            $2::boolean = false
+            OR EXISTS (
+                SELECT 1 FROM billing_logs bl WHERE bl.user_id = u.id AND bl.amount_cents > 0
+            )
+        )
 ),
 user_usage AS (
     SELECT
@@ -1470,6 +1492,11 @@ LEFT JOIN user_usage ON user_usage.user_id = filtered_users.id
 LEFT JOIN active_keys ON active_keys.user_id = filtered_users.id
 `
 
+type GetUsersSummaryForAdminParams struct {
+	Keyword     string `json:"keyword"`
+	HasSpending bool   `json:"hasSpending"`
+}
+
 type GetUsersSummaryForAdminRow struct {
 	TotalUsers        int64 `json:"totalUsers"`
 	ActiveUsers       int64 `json:"activeUsers"`
@@ -1480,8 +1507,8 @@ type GetUsersSummaryForAdminRow struct {
 	TotalActiveKeys   int64 `json:"totalActiveKeys"`
 }
 
-func (q *Queries) GetUsersSummaryForAdmin(ctx context.Context, keyword string) (GetUsersSummaryForAdminRow, error) {
-	row := q.db.QueryRow(ctx, getUsersSummaryForAdmin, keyword)
+func (q *Queries) GetUsersSummaryForAdmin(ctx context.Context, arg GetUsersSummaryForAdminParams) (GetUsersSummaryForAdminRow, error) {
+	row := q.db.QueryRow(ctx, getUsersSummaryForAdmin, arg.Keyword, arg.HasSpending)
 	var i GetUsersSummaryForAdminRow
 	err := row.Scan(
 		&i.TotalUsers,
@@ -1904,15 +1931,20 @@ WHERE
         OR u.email ILIKE '%' || $1::text || '%'
         OR COALESCE(u.nickname, '') ILIKE '%' || $1::text || '%'
     )
+    AND (
+        $2::boolean = false
+        OR (user_usage.total_amount_cents IS NOT NULL AND user_usage.total_amount_cents > 0)
+    )
 ORDER BY COALESCE(user_usage.last_request_at, u.created_at) DESC, u.id DESC
-LIMIT $3
-OFFSET $2
+LIMIT $4
+OFFSET $3
 `
 
 type ListUsersForAdminParams struct {
-	Keyword   string `json:"keyword"`
-	OffsetVal int32  `json:"offsetVal"`
-	LimitVal  int32  `json:"limitVal"`
+	Keyword     string `json:"keyword"`
+	HasSpending bool   `json:"hasSpending"`
+	OffsetVal   int32  `json:"offsetVal"`
+	LimitVal    int32  `json:"limitVal"`
 }
 
 type ListUsersForAdminRow struct {
@@ -1933,7 +1965,12 @@ type ListUsersForAdminRow struct {
 }
 
 func (q *Queries) ListUsersForAdmin(ctx context.Context, arg ListUsersForAdminParams) ([]ListUsersForAdminRow, error) {
-	rows, err := q.db.Query(ctx, listUsersForAdmin, arg.Keyword, arg.OffsetVal, arg.LimitVal)
+	rows, err := q.db.Query(ctx, listUsersForAdmin,
+		arg.Keyword,
+		arg.HasSpending,
+		arg.OffsetVal,
+		arg.LimitVal,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -26,6 +27,26 @@ import (
 )
 
 const maxFailureResponseBodyLength = 4096
+
+// upstreamIdleTimeout 是「上游连续静默」的上限:既覆盖"等首响应"(慢图片/推理模型),
+// 也覆盖"流式中途彻底卡死"。每次从上游读取都会重置,故持续产出的长流永不触发。
+// 设得足够大以容纳慢同步生成;若无慢同步媒体可调小以更快发现 stall。
+const upstreamIdleTimeout = 300 * time.Second
+
+// idleTimeoutConn 包装上游连接,在每次 Read 前重置读 deadline,实现"空闲读超时"。
+// 比在 ModifyResponse 里用 goroutine 包装 body 更干净(无数据竞争、无 goroutine 泄漏),
+// 且对流式/非流式一视同仁。
+type idleTimeoutConn struct {
+	net.Conn
+	idle time.Duration
+}
+
+func (c *idleTimeoutConn) Read(b []byte) (int, error) {
+	if c.idle > 0 {
+		_ = c.Conn.SetReadDeadline(time.Now().Add(c.idle))
+	}
+	return c.Conn.Read(b)
+}
 
 // billingWriteTimeout 限定计费/退款/审计等后台写的最长耗时。
 // 这些写故意脱离请求 context（客户端断流也必须完成结算），但仍需一个上限，
@@ -57,6 +78,12 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		req.Body.Close()
 	}
 
+	// 循环内会改写 req(URL.Path、Header、Body 等)。必须在循环外保存“客户端原始值”,
+	// 每次尝试前重置——否则第 2 次重试会基于上一渠道已改写过的 Path/Header 继续改写,
+	// 失败转移直接变成 500(本次稳定性问题的主要根因之一)。
+	clientPath := req.URL.Path
+	clientHeader := req.Header.Clone()
+
 	// retryBackoff 为重试之间提供递增退避延时。
 	// 首次重试 200ms，之后翻倍，上限 2s。
 	retryBackoff := 200 * time.Millisecond
@@ -76,10 +103,12 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 			}
 		}
 
-		// 每次请求前恢复 Body
+		// 每次请求前恢复到客户端原始状态(Body / Path / Header),避免跨渠道重试时改写叠加
 		if reqBodyBytes != nil {
 			req.Body = io.NopCloser(bytes.NewBuffer(reqBodyBytes))
 		}
+		req.URL.Path = clientPath
+		req.Header = clientHeader.Clone()
 
 		// 判断是否是计费路由，以及具体的请求类型
 		isBillingRoute, _ := req.Context().Value(reqctx.KeyIsBillingRoute).(bool)
@@ -145,7 +174,16 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		}
 
 		// 动态重写请求的 URL 和 Authorization 头部
-		upstreamURL, _ := url.Parse(ch.BaseUrl)
+		upstreamURL, parseErr := url.Parse(ch.BaseUrl)
+		if parseErr != nil || upstreamURL.Scheme == "" || upstreamURL.Host == "" {
+			// 渠道 base_url 配置错误:标记失败并尝试下一个渠道,绝不 nil 解引用 panic
+			//(否则一个配置错误的渠道会让命中它的请求全部 500)
+			log.Printf("channel %d has invalid base_url %q: %v", ch.ID, ch.BaseUrl, parseErr)
+			attemptedChannels[ch.ID] = struct{}{}
+			channel.GlobalManager.MarkChannelFailed(ch.ID)
+			err = fmt.Errorf("channel %d has invalid base_url", ch.ID)
+			continue
+		}
 		req.URL.Scheme = upstreamURL.Scheme
 		req.URL.Host = upstreamURL.Host
 		req.Host = upstreamURL.Host
@@ -164,6 +202,9 @@ func (t *FallbackTransport) RoundTrip(req *http.Request) (*http.Response, error)
 		}
 
 		driver := provider.GetProvider(ch.Provider)
+		// 清掉客户端原始 Authorization(用户的 ainode key),避免透传给上游;
+		// 由 provider 的鉴权策略重新写入上游真正的凭证(Authorization 或 x-api-key 等)。
+		req.Header.Del("Authorization")
 		if authStrategy := driver.Auth(); authStrategy != nil {
 			if authErr := authStrategy.Apply(req, ch.ApiKey); authErr != nil {
 				return nil, fmt.Errorf("failed to apply provider auth: %w", authErr)
@@ -469,12 +510,21 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 		ModifyResponse: modifyResponse,
 		Transport: &FallbackTransport{
 			OriginalTransport: &http.Transport{
-				DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ResponseHeaderTimeout: 90 * time.Second, // AI 模型高峰期首 token 延迟可能超过 30s
-				IdleConnTimeout:       90 * time.Second,
-				MaxIdleConnsPerHost:   100,
-				MaxConnsPerHost:       100, // 防止对单个上游无限制建连
+				// 用连接级「空闲读超时」统一兜底:每次从上游读取都重置 deadline,
+				// 因此"等首响应过久"(慢图片/推理)和"流式中途彻底卡死"用同一套上限——
+				// 只要上游持续有数据就永不触发,连续静默超过 upstreamIdleTimeout 才中止。
+				// (替代固定的 ResponseHeaderTimeout,避免误杀首响应很慢的长生成。)
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					c, err := (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, network, addr)
+					if err != nil {
+						return nil, err
+					}
+					return &idleTimeoutConn{Conn: c, idle: upstreamIdleTimeout}, nil
+				},
+				TLSHandshakeTimeout: 10 * time.Second,
+				IdleConnTimeout:     90 * time.Second,
+				MaxIdleConnsPerHost: 100,
+				MaxConnsPerHost:     100, // 防止对单个上游无限制建连
 			},
 			MaxRetries: 2, // 失败最多重试2次下一个渠道
 			DBQueries:  queries,
@@ -515,25 +565,33 @@ func NewGatewayProxy(queries *db.Queries) *httputil.ReverseProxy {
 				}
 			}
 
-			// 记录网关层面的错误 (502 Bad Gateway)
+			// 区分「上游超时」与「其它上游失败」:超时用 504 + type:timeout(语义正确,
+			// 且 OpenAI SDK / agent 对 408/409/429/≥500 会自动重试,能自愈)。
+			status := http.StatusBadGateway
+			errType, errCode := "server_error", "bad_gateway"
+			errMsg := "Bad Gateway: Upstream connection failed"
+			var netErr net.Error
+			if err != nil && (errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())) {
+				status = http.StatusGatewayTimeout
+				errType, errCode = "timeout", "upstream_timeout"
+				errMsg = fmt.Sprintf("Gateway Timeout: %v", err)
+			} else if err != nil {
+				errMsg = fmt.Sprintf("Bad Gateway: %v", err)
+			}
+
 			modelName, _ := ctx.Value(reqctx.KeyPublicModelName).(string)
 			if modelName == "" {
 				modelName, _ = ctx.Value(reqctx.KeyModelName).(string)
 			}
 			channelID, _ := ctx.Value(reqctx.KeyCurrentChannelID).(int32)
 			if modelName != "" {
-				metrics.GatewayRequestTotal.WithLabelValues(modelName, strconv.Itoa(int(channelID)), "502").Inc()
+				metrics.GatewayRequestTotal.WithLabelValues(modelName, strconv.Itoa(int(channelID)), strconv.Itoa(status)).Inc()
 			}
 
-			// 构建详细的错误响应，包含具体原因
-			errMsg := "Bad Gateway: Upstream connection failed"
-			if err != nil {
-				errMsg = fmt.Sprintf("Bad Gateway: %v", err)
-			}
-			logModelFailure(ctx, queries, http.StatusBadGateway, "", nil, errMsg)
+			logModelFailure(ctx, queries, status, "", nil, errMsg)
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			w.WriteHeader(http.StatusBadGateway)
-			fmt.Fprintf(w, `{"error":{"message":%q,"type":"server_error","code":"bad_gateway"}}`, errMsg)
+			w.WriteHeader(status)
+			fmt.Fprintf(w, `{"error":{"message":%q,"type":%q,"code":%q}}`, errMsg, errType, errCode)
 		},
 	}
 }

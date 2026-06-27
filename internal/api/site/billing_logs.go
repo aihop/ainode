@@ -105,23 +105,23 @@ func (h *InternalHandler) BillingLogsListHandler(w http.ResponseWriter, r *http.
 		CacheHit         int32   `json:"cacheHit"`
 		CacheMiss        int32   `json:"cacheMiss"`
 		Type             string  `json:"type"`
-		Cost             float64 `json:"cost"`                // 高精度金额（8 位小数，与 10^8 刻度对齐），小额也不为 0
-		AmountCents      int64   `json:"amountCents"`         // 原始整数（10^8 放大），精确账本值，永不丢失
-		PreDeductedCents int64   `json:"preDeductedCents"`    // 预扣金额（10^8 放大），与 amount_cents 的差值即为退费/补扣
+		Cost             float64 `json:"cost"`             // 高精度金额（8 位小数，与 10^8 刻度对齐），小额也不为 0
+		AmountCents      int64   `json:"amountCents"`      // 原始整数（10^8 放大），精确账本值，永不丢失
+		PreDeductedCents int64   `json:"preDeductedCents"` // 预扣金额（10^8 放大），与 amount_cents 的差值即为退费/补扣
 	}
 	resLogs := make([]LogItem, 0)
 	for _, l := range logs {
 		resLogs = append(resLogs, LogItem{
-			ID:          formatUUID(l.ID),
-			Time:        utils.FormatTime(l.CreatedAt.Time),
-			Model:       l.ModelName,
-			Input:       l.PromptTokens.Int32,
-			Output:      l.CompletionTokens.Int32,
-			CacheHit:    l.CacheHitTokens.Int32,
-			CacheMiss:   l.CacheMissTokens.Int32,
-			Type:        l.LogType,
-			Cost:        centsToMoneyPrecise(l.AmountCents),
-			AmountCents: l.AmountCents,
+			ID:               formatUUID(l.ID),
+			Time:             utils.FormatTime(l.CreatedAt.Time),
+			Model:            l.ModelName,
+			Input:            l.PromptTokens.Int32,
+			Output:           l.CompletionTokens.Int32,
+			CacheHit:         l.CacheHitTokens.Int32,
+			CacheMiss:        l.CacheMissTokens.Int32,
+			Type:             l.LogType,
+			Cost:             centsToMoneyPrecise(l.AmountCents),
+			AmountCents:      l.AmountCents,
 			PreDeductedCents: l.PreDeductedCents,
 		})
 	}

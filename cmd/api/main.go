@@ -312,6 +312,14 @@ func main() {
 			// E. 挂载代理引擎，接管所有其他请求
 			gatewayProxy := proxy.NewGatewayProxy(queries)
 			proxyRouter.HandleFunc("/*", func(w http.ResponseWriter, r *http.Request) {
+				// 本网关只支持 HTTP/SSE,不支持任何协议升级(WebSocket/Realtime、h2c 等)。
+				// 直接明确拒绝,避免被兜底反代转给不支持的上游后挂起到超时(偶发 500/超时的来源之一)。
+				if r.Header.Get("Upgrade") != "" {
+					w.Header().Set("Content-Type", "application/json; charset=utf-8")
+					w.WriteHeader(http.StatusNotImplemented)
+					fmt.Fprint(w, `{"error":{"message":"Protocol upgrade (e.g. WebSocket/Realtime) is not supported by this gateway","type":"not_supported","code":"upgrade_unsupported"}}`)
+					return
+				}
 				gatewayProxy.ServeHTTP(w, r)
 			})
 		})
@@ -328,10 +336,15 @@ func main() {
 
 	// 6. 启动服务器与优雅启停
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler:      r,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 120 * time.Second, // SSE 流式响应需要较长的写超时
+		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler: r,
+		// ReadHeaderTimeout 防 slowloris;请求头必须 30s 内读完
+		ReadHeaderTimeout: 30 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		// SSE 流式 / 长生成(推理模型、长输出)不能设写超时:WriteTimeout 是"整个响应写完"
+		// 的硬上限,从请求开始计时且无法按请求放宽,设了就会到点掐断长回答(本次问题根因)。
+		// 置 0 表示不限,慢首 token 由上游 transport 的 ResponseHeaderTimeout 兜底。
+		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,
 	}
 

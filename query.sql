@@ -422,6 +422,10 @@ WHERE
         OR u.email ILIKE '%' || sqlc.arg(keyword)::text || '%'
         OR COALESCE(u.nickname, '') ILIKE '%' || sqlc.arg(keyword)::text || '%'
     )
+    AND (
+        sqlc.arg(has_spending)::boolean = false
+        OR (user_usage.total_amount_cents IS NOT NULL AND user_usage.total_amount_cents > 0)
+    )
 ORDER BY COALESCE(user_usage.last_request_at, u.created_at) DESC, u.id DESC
 LIMIT sqlc.arg(limit_val)
 OFFSET sqlc.arg(offset_val);
@@ -429,11 +433,22 @@ OFFSET sqlc.arg(offset_val);
 -- name: CountUsersForAdmin :one
 SELECT COUNT(*)
 FROM users u
+LEFT JOIN (
+    SELECT
+        user_id,
+        COALESCE(SUM(amount_cents), 0)::bigint AS total_amount_cents
+    FROM billing_logs
+    GROUP BY user_id
+) user_usage ON user_usage.user_id = u.id
 WHERE
     (
         sqlc.arg(keyword)::text = ''
         OR u.email ILIKE '%' || sqlc.arg(keyword)::text || '%'
         OR COALESCE(u.nickname, '') ILIKE '%' || sqlc.arg(keyword)::text || '%'
+    )
+    AND (
+        sqlc.arg(has_spending)::boolean = false
+        OR (user_usage.total_amount_cents IS NOT NULL AND user_usage.total_amount_cents > 0)
     );
 
 -- name: CreateTransaction :one
@@ -615,6 +630,12 @@ WITH filtered_users AS (
             sqlc.arg(keyword)::text = ''
             OR u.email ILIKE '%' || sqlc.arg(keyword)::text || '%'
             OR COALESCE(u.nickname, '') ILIKE '%' || sqlc.arg(keyword)::text || '%'
+        )
+        AND (
+            sqlc.arg(has_spending)::boolean = false
+            OR EXISTS (
+                SELECT 1 FROM billing_logs bl WHERE bl.user_id = u.id AND bl.amount_cents > 0
+            )
         )
 ),
 user_usage AS (
